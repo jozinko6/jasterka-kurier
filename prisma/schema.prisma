@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,20 +7,338 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ─── Enums ───
+
+enum UserRole {
+  ADMIN
+  KITCHEN
+  COURIER
+  CUSTOMER
+  OWNER
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum OrderStatus {
+  NEW
+  ACCEPTED
+  IN_KITCHEN
+  PREPARING
+  READY
+  WAITING_FOR_COURIER
+  ASSIGNED_TO_COURIER
+  PICKED_UP
+  ON_THE_WAY
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum OrderType {
+  DELIVERY
+  PICKUP
+  SCHEDULED_DELIVERY
+  SCHEDULED_PICKUP
+}
+
+enum PaymentMethod {
+  CASH
+  CARD_ON_DELIVERY
+  CARD_ON_PICKUP
+  ONLINE_CARD
+}
+
+enum CourierStatus {
+  OFFLINE
+  AVAILABLE
+  ASSIGNED
+  PICKING_UP
+  DELIVERING
+  BREAK
+}
+
+enum DeliveryAssignmentStatus {
+  PENDING
+  ASSIGNED
+  ACCEPTED
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+}
+
+enum VehicleType {
+  BICYCLE
+  SCOOTER
+  CAR
+}
+
+enum MenuItemOptionType {
+  SIZE
+  EXTRA
+  REMOVE
+}
+
+// ─── Models ───
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String?   @unique
+  phone              String?   @unique
+  passwordHash       String?
+  role               UserRole  @default(CUSTOMER)
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  customerProfile    Customer?
+  courierProfile     Courier?
+  orderStatusChanges OrderStatusHistory[]
+  deliveryAssignments DeliveryAssignment[] @relation("AssignmentActor")
+  kitchenEvents      KitchenEvent[]
+}
+
+model Customer {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  fullName         String
+  defaultNote      String?
+  marketingConsent Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders           Order[]
+}
+
+model Courier {
+  id               String        @id @default(cuid())
+  userId           String        @unique
+  displayName      String
+  phone            String?
+  vehicleType      VehicleType   @default(BICYCLE)
+  status           CourierStatus @default(OFFLINE)
+  isActive         Boolean       @default(true)
+  currentLatitude  Float?
+  currentLongitude Float?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments      DeliveryAssignment[]
+  earnings         CourierEarning[]
+  activeOrderCount Int              @default(0)
+}
+
+model MenuCategory {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  name        String
+  description String?
+  sortOrder   Int        @default(0)
+  isActive    Boolean    @default(true)
+  isDailyMenu Boolean    @default(false)
+  imageUrl    String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  menuItems   MenuItem[]
+}
+
+model MenuItem {
+  id                    String     @id @default(cuid())
+  categoryId            String
+  slug                  String     @unique
+  name                  String
+  description           String?
+  basePrice             Float
+  imageUrl              String?
+  isActive              Boolean    @default(true)
+  isFeatured            Boolean    @default(false)
+  isAvailable           Boolean    @default(true)
+  preparationTimeMinutes Int?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  category              MenuCategory    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  options               MenuItemOption[]
+  orderItems            OrderItem[]
+}
+
+model MenuItemOption {
+  id          String             @id @default(cuid())
+  menuItemId  String
+  optionGroup String
+  optionType  MenuItemOptionType
+  name        String
+  priceDelta  Float              @default(0)
+  isDefault   Boolean            @default(false)
+  isRequired  Boolean            @default(false)
+  sortOrder   Int                @default(0)
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  menuItem    MenuItem           @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+  id                   String        @id @default(cuid())
+  orderNumber          String        @unique
+  customerId           String?
+  status               OrderStatus   @default(NEW)
+  orderType            OrderType     @default(DELIVERY)
+  paymentMethod        PaymentMethod @default(CASH)
+  paymentStatus        String        @default("PENDING")
+  customerName         String
+  customerPhone        String
+  customerEmail        String?
+  deliveryZoneId       String?
+  deliveryAddressLine1 String?
+  deliveryAddressLine2 String?
+  deliveryCity         String?
+  deliveryNote         String?
+  kitchenNote          String?
+  subtotalAmount       Float
+  deliveryFee          Float         @default(0)
+  totalAmount          Float
+  scheduledFor         DateTime?
+  acceptedAt           DateTime?
+  readyAt              DateTime?
+  pickedUpAt           DateTime?
+  deliveredAt          DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  customer             Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  deliveryZone         DeliveryZone?     @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
+  items                OrderItem[]
+  statusHistory        OrderStatusHistory[]
+  assignments          DeliveryAssignment[]
+  earnings             CourierEarning[]
+  kitchenEvents        KitchenEvent[]
+}
+
+model OrderItem {
+  id                   String   @id @default(cuid())
+  orderId              String
+  menuItemId           String?
+  menuItemNameSnapshot String
+  quantity             Int
+  basePriceSnapshot    Float
+  unitTotalSnapshot    Float
+  lineTotal            Float
+  selectedSize         String?
+  selectedOptions      String?  // JSON string
+  kitchenNote          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  order                Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem             MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+}
+
+model OrderStatusHistory {
+  id              String      @id @default(cuid())
+  orderId         String
+  status          OrderStatus
+  changedByUserId String?
+  reason          String?
+  createdAt       DateTime    @default(now())
+
+  order           Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedByUser   User?       @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+}
+
+model DeliveryZone {
+  id                       String   @id @default(cuid())
+  name                     String   @unique
+  deliveryFee              Float    @default(0)
+  minimumOrderAmount       Float    @default(0)
+  estimatedDeliveryMinutes Int
+  allowedVehicleTypes      String   @default("BICYCLE,SCOOTER,CAR") // comma-separated
+  isActive                 Boolean  @default(true)
+  priority                 Int      @default(0)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  orders      Order[]
+  assignments DeliveryAssignment[]
+  earnings    CourierEarning[]
+}
+
+model DeliveryAssignment {
+  id               String                   @id @default(cuid())
+  orderId          String
+  courierId        String
+  zoneId           String?
+  status           DeliveryAssignmentStatus @default(PENDING)
+  assignedByUserId String?
+  assignedAt       DateTime                 @default(now())
+  acceptedAt       DateTime?
+  pickedUpAt       DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  order            Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courier          Courier                  @relation(fields: [courierId], references: [id], onDelete: Restrict)
+  zone             DeliveryZone?            @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  assignedByUser   User?                    @relation("AssignmentActor", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([courierId])
+  @@index([orderId])
+}
+
+model CourierEarning {
+  id                     String   @id @default(cuid())
+  courierId              String
+  orderId                String   @unique
+  zoneId                 String?
+  baseAmount             Float
+  zoneBonusAmount        Float    @default(0)
+  manualAdjustmentAmount Float    @default(0)
+  totalAmount            Float
+  earningDate            DateTime
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  courier                Courier       @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  order                  Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  zone                   DeliveryZone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+}
+
+model KitchenEvent {
+  id              String   @id @default(cuid())
+  orderId         String
+  eventType       String
+  note            String?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdByUser   User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+}
+
+model RestaurantSettings {
+  id                  String   @id @default(cuid())
+  deliveryEnabled     Boolean  @default(true)
+  pickupEnabled       Boolean  @default(true)
+  isOpen              Boolean  @default(true)
+  customerMessage     String?
+  averagePrepMinutes  Int      @default(30)
+  minimumOrderAmount  Float    @default(0)
+  storePhone          String?
+  storeAddress        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model OpeningHours {
+  id         String   @id @default(cuid())
+  dayOfWeek  Int
+  openTime   String?
+  closeTime  String?
+  isClosed   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([dayOfWeek])
 }
