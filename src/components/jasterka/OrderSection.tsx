@@ -53,7 +53,10 @@ export function OrderSection() {
 
   const { data: categories, isLoading } = useQuery<MenuCategory[]>({
     queryKey: ['menu'],
-    queryFn: () => fetch('/api/menu').then(r => r.json()),
+    queryFn: () => fetch('/api/menu').then(r => {
+      if (!r.ok) throw new Error('Failed to fetch menu')
+      return r.json()
+    }),
   })
 
   const cartStore = useCartStore()

@@ -7,7 +7,7 @@
     "build": "prisma generate && next build --webpack",
     "start": "next start",
     "lint": "eslint .",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate --schema=prisma/schema.sqlite.prisma",
     "db:push": "prisma db push --schema=prisma/schema.sqlite.prisma",
     "db:generate": "prisma generate --schema=prisma/schema.sqlite.prisma",
     "db:migrate": "prisma migrate dev --schema=prisma/schema.sqlite.prisma",
