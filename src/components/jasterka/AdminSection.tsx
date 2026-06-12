@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { authFetch } from '@/stores/auth-store'
 import { toast } from 'sonner'
 import type { Order, OrderStatus, Courier, DeliveryZone, RestaurantSettings, MenuCategory } from '@/lib/types'
 import { formatPrice, getStatusColor, ORDER_STATUS_LABELS, COURIER_STATUS_LABELS, VEHICLE_TYPE_LABELS } from '@/lib/types'
@@ -120,18 +121,18 @@ function AdminOrders() {
     queryKey: ['admin-orders', statusFilter],
     queryFn: () => {
       const params = statusFilter !== 'ALL' ? `?status=${statusFilter}` : ''
-      return fetch(`/api/orders${params}`).then(r => r.json())
+      return authFetch(`/api/orders${params}`).then(r => r.json())
     },
   })
 
   const { data: couriers } = useQuery<Courier[]>({
     queryKey: ['couriers'],
-    queryFn: () => fetch('/api/couriers').then(r => r.json()),
+    queryFn: () => authFetch('/api/couriers').then(r => r.json()),
   })
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
-      const res = await fetch(`/api/orders/${orderId}`, {
+      const res = await authFetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -149,7 +150,7 @@ function AdminOrders() {
 
   const assignCourierMutation = useMutation({
     mutationFn: async ({ orderId, courierId }: { orderId: string; courierId: string }) => {
-      const res = await fetch('/api/dispatch', {
+      const res = await authFetch('/api/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId, courierId }),
@@ -368,12 +369,12 @@ function AdminMenu() {
 
   const { data: categories, isLoading } = useQuery<MenuCategory[]>({
     queryKey: ['admin-categories'],
-    queryFn: () => fetch('/api/admin/categories').then(r => r.json()),
+    queryFn: () => authFetch('/api/admin/categories').then(r => r.json()),
   })
 
   const updateMenuItemMutation = useMutation({
     mutationFn: async ({ id, ...fields }: { id: string; isActive?: boolean; isAvailable?: boolean }) => {
-      const res = await fetch('/api/admin/menu', {
+      const res = await authFetch('/api/admin/menu', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, ...fields }),
@@ -464,7 +465,7 @@ function AdminSettings() {
 
   const { data: settings, isLoading } = useQuery<RestaurantSettings>({
     queryKey: ['settings'],
-    queryFn: () => fetch('/api/settings').then(r => r.json()),
+    queryFn: () => authFetch('/api/settings').then(r => r.json()),
   })
 
   const [form, setForm] = useState<Partial<RestaurantSettings>>({})
@@ -487,7 +488,7 @@ function AdminSettings() {
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (data: Partial<RestaurantSettings>) => {
-      const res = await fetch('/api/settings', {
+      const res = await authFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -622,12 +623,12 @@ function AdminCouriers() {
 
   const { data: couriers, isLoading } = useQuery<Courier[]>({
     queryKey: ['couriers'],
-    queryFn: () => fetch('/api/couriers').then(r => r.json()),
+    queryFn: () => authFetch('/api/couriers').then(r => r.json()),
   })
 
   const updateCourierMutation = useMutation({
     mutationFn: async ({ courierId, status }: { courierId: string; status: string }) => {
-      const res = await fetch('/api/couriers', {
+      const res = await authFetch('/api/couriers', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ courierId, status }),
@@ -714,7 +715,7 @@ function AdminCouriers() {
 function AdminStats() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['stats'],
-    queryFn: () => fetch('/api/stats').then(r => r.json()),
+    queryFn: () => authFetch('/api/stats').then(r => r.json()),
   })
 
   if (isLoading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
@@ -755,7 +756,7 @@ function AdminStats() {
             <div>
               <p className="text-sm text-muted-foreground">Celkom objednávok</p>
               <p className="text-2xl font-bold">
-                {Object.values(stats?.orderCountsByStatus || {}).reduce((a: number, b: number) => a + b, 0) as number}
+                {Object.values(stats?.orderCountsByStatus || {}).reduce((a: number, b: unknown) => a + Number(b), 0) as number}
               </p>
             </div>
           </div>

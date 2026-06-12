@@ -957,7 +957,7 @@ function OrderTracking({ orderId, onBack }: { orderId: string; onBack: () => voi
 
   const statusSteps: OrderStatus[] = [
     'NEW', 'ACCEPTED', 'IN_KITCHEN', 'PREPARING', 'READY',
-    ...(order?.orderType === 'DELIVERY' ? ['WAITING_FOR_COURIER', 'ASSIGNED_TO_COURIER', 'PICKED_UP', 'ON_THE_WAY'] : []),
+    ...(order?.orderType === 'DELIVERY' ? (['WAITING_FOR_COURIER', 'ASSIGNED_TO_COURIER', 'PICKED_UP', 'ON_THE_WAY'] as OrderStatus[]) : []),
     'DELIVERED',
   ]
 
@@ -1003,11 +1003,11 @@ function OrderTracking({ orderId, onBack }: { orderId: string; onBack: () => voi
                   <div
                     key={step}
                     className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
-                      isCurrent ? 'ring-2' : ''
+                      isCurrent ? '' : ''
                     }`}
                     style={{
                       backgroundColor: isCompleted ? (isCancelled && isCurrent ? '#fef2f0' : '#f0f7ec') : '#f9f9f9',
-                      ringColor: isCurrent ? '#4f7f2a' : undefined,
+                      ...(isCurrent ? { boxShadow: '0 0 0 2px #4f7f2a' } : {}),
                     }}
                   >
                     <div

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireRole } from '@/lib/auth'
+import { updateOpeningHoursSchema, validateBody } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   try {
+    // Opening hours are public
     const openingHours = await db.openingHours.findMany({
       orderBy: { dayOfWeek: 'asc' },
     })
@@ -11,7 +14,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching opening hours:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch opening hours' },
+      { error: 'Nepodarilo sa načítať otváracie hodiny' },
       { status: 500 }
     )
   }
@@ -19,23 +22,26 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
-
-    if (!Array.isArray(body)) {
-      return NextResponse.json(
-        { error: 'Request body must be an array of opening hours' },
-        { status: 400 }
-      )
+    // Only admins can update opening hours
+    const authResult = await requireRole(request, ['ADMIN', 'OWNER'])
+    if ('error' in authResult) {
+      return authResult.error
     }
 
-    const results = []
+    const body = await request.json()
 
-    for (const item of body) {
+    // Validate input
+    const validation = validateBody(updateOpeningHoursSchema, body)
+    if ('error' in validation) {
+      return validation.error
+    }
+
+    const data = validation.data
+
+    const results: Record<string, unknown>[] = []
+
+    for (const item of data) {
       const { dayOfWeek, openTime, closeTime, isClosed } = item
-
-      if (dayOfWeek === undefined || dayOfWeek === null) {
-        continue
-      }
 
       // Upsert by dayOfWeek (unique constraint)
       const result = await db.openingHours.upsert({
@@ -60,7 +66,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('Error updating opening hours:', error)
     return NextResponse.json(
-      { error: 'Failed to update opening hours' },
+      { error: 'Nepodarilo sa aktualizovať otváracie hodiny' },
       { status: 500 }
     )
   }

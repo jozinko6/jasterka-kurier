@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { authFetch } from '@/stores/auth-store'
 import { toast } from 'sonner'
 import type { Order, OrderStatus } from '@/lib/types'
 import { formatPrice, getStatusColor, ORDER_STATUS_LABELS } from '@/lib/types'
@@ -45,13 +46,13 @@ export function KitchenSection() {
 
   const { data: orders, isLoading, refetch } = useQuery<Order[]>({
     queryKey: ['kitchen'],
-    queryFn: () => fetch('/api/kitchen').then(r => r.json()),
+    queryFn: () => authFetch('/api/kitchen').then(r => r.json()),
     refetchInterval: 10000,
   })
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
-      const res = await fetch(`/api/orders/${orderId}`, {
+      const res = await authFetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),

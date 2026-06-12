@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { OrderStatus } from '@prisma/client'
 import { decimalToNumber } from '@/lib/decimal-utils'
+import { authenticateRequest, requireRole, isValidStatusTransition, getAllowedTransitions } from '@/lib/auth'
+import { updateOrderStatusSchema, validateBody } from '@/lib/validations'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Public endpoint - customers can track their orders by ID
+    // (No authentication required - knowing the order ID is sufficient)
     const { id } = await params
 
     const order = await db.order.findUnique({
@@ -48,7 +52,7 @@ export async function GET(
 
     if (!order) {
       return NextResponse.json(
-        { error: 'Order not found' },
+        { error: 'Objednávka nenájdená' },
         { status: 404 }
       )
     }
@@ -57,7 +61,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching order:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch order' },
+      { error: 'Nepodarilo sa načítať objednávku' },
       { status: 500 }
     )
   }
@@ -68,23 +72,41 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Require at least KITCHEN or ADMIN role to change order status
+    const authResult = await requireRole(request, ['ADMIN', 'KITCHEN', 'COURIER', 'OWNER'])
+    if ('error' in authResult) {
+      return authResult.error
+    }
+
     const { id } = await params
     const body = await request.json()
-    const { status, changedByUserId, reason } = body
 
-    if (!status) {
-      return NextResponse.json(
-        { error: 'Missing required field: status' },
-        { status: 400 }
-      )
+    // Validate input
+    const validation = validateBody(updateOrderStatusSchema, body)
+    if ('error' in validation) {
+      return validation.error
     }
+
+    const data = validation.data
 
     // Verify order exists
     const existingOrder = await db.order.findUnique({ where: { id } })
     if (!existingOrder) {
       return NextResponse.json(
-        { error: 'Order not found' },
+        { error: 'Objednávka nenájdená' },
         { status: 404 }
+      )
+    }
+
+    // Validate status transition
+    if (!isValidStatusTransition(existingOrder.status, data.status)) {
+      return NextResponse.json(
+        {
+          error: `Zmena stavu z ${existingOrder.status} na ${data.status} nie je povolená`,
+          currentStatus: existingOrder.status,
+          allowedTransitions: getAllowedTransitions(existingOrder.status),
+        },
+        { status: 400 }
       )
     }
 
@@ -92,7 +114,7 @@ export async function PATCH(
     const timestampUpdates: Record<string, Date> = {}
     const now = new Date()
 
-    switch (status as OrderStatus) {
+    switch (data.status as OrderStatus) {
       case 'ACCEPTED':
         timestampUpdates.acceptedAt = now
         break
@@ -108,33 +130,35 @@ export async function PATCH(
     }
 
     // Update order and create status history in a transaction
-    const updatedOrder = await db.order.update({
-      where: { id },
-      data: {
-        status: status as OrderStatus,
-        ...timestampUpdates,
-        statusHistory: {
-          create: {
-            status: status as OrderStatus,
-            changedByUserId: changedByUserId || null,
-            reason: reason || null,
+    const updatedOrder = await db.$transaction(async (tx) => {
+      return tx.order.update({
+        where: { id },
+        data: {
+          status: data.status as OrderStatus,
+          ...timestampUpdates,
+          statusHistory: {
+            create: {
+              status: data.status as OrderStatus,
+              changedByUserId: data.changedByUserId || authResult.user.id,
+              reason: data.reason || null,
+            },
           },
         },
-      },
-      include: {
-        items: true,
-        statusHistory: {
-          orderBy: { createdAt: 'asc' },
+        include: {
+          items: true,
+          statusHistory: {
+            orderBy: { createdAt: 'asc' },
+          },
+          deliveryZone: true,
         },
-        deliveryZone: true,
-      },
+      })
     })
 
     return NextResponse.json(decimalToNumber(updatedOrder))
   } catch (error) {
     console.error('Error updating order:', error)
     return NextResponse.json(
-      { error: 'Failed to update order' },
+      { error: 'Nepodarilo sa aktualizovať objednávku' },
       { status: 500 }
     )
   }

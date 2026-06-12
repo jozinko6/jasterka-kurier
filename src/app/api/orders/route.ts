@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { OrderStatus } from '@prisma/client'
 import { decimalToNumber } from '@/lib/decimal-utils'
+import { requireRole, authenticateRequest } from '@/lib/auth'
+import { createOrderSchema, validateBody } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   try {
+    // Require authentication for viewing orders
+    const authResult = await authenticateRequest(request)
+    if ('error' in authResult) {
+      return authResult.error
+    }
+
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
 
@@ -45,7 +53,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching orders:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch orders' },
+      { error: 'Nepodarilo sa načítať objednávky' },
       { status: 500 }
     )
   }
@@ -53,31 +61,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Order creation is public (customers place orders)
     const body = await request.json()
-    const {
-      customerName,
-      customerPhone,
-      customerEmail,
-      orderType,
-      paymentMethod,
-      deliveryZoneId,
-      deliveryAddressLine1,
-      deliveryCity,
-      deliveryNote,
-      kitchenNote,
-      items,
-    } = body
 
-    // Validate required fields
-    if (!customerName || !customerPhone || !items || items.length === 0) {
-      return NextResponse.json(
-        { error: 'Missing required fields: customerName, customerPhone, items' },
-        { status: 400 }
-      )
+    // Validate input
+    const validation = validateBody(createOrderSchema, body)
+    if ('error' in validation) {
+      return validation.error
     }
 
+    const data = validation.data
+
     // Look up all menu items for price calculation
-    const menuItemIds = items.map((item: { menuItemId: string }) => item.menuItemId)
+    const menuItemIds = data.items.map((item) => item.menuItemId)
     const menuItems = await db.menuItem.findMany({
       where: { id: { in: menuItemIds } },
       include: {
@@ -102,11 +98,11 @@ export async function POST(request: NextRequest) {
       kitchenNote: string | null
     }> = []
 
-    for (const item of items) {
+    for (const item of data.items) {
       const menuItem = menuItemMap.get(item.menuItemId)
       if (!menuItem) {
         return NextResponse.json(
-          { error: `Menu item not found: ${item.menuItemId}` },
+          { error: `Položka menu nenájdená: ${item.menuItemId}` },
           { status: 400 }
         )
       }
@@ -161,9 +157,9 @@ export async function POST(request: NextRequest) {
 
     // Get delivery fee from zone
     let deliveryFee = 0
-    if (deliveryZoneId && orderType === 'DELIVERY') {
+    if (data.deliveryZoneId && data.orderType === 'DELIVERY') {
       const zone = await db.deliveryZone.findUnique({
-        where: { id: deliveryZoneId },
+        where: { id: data.deliveryZoneId },
       })
       if (zone) {
         deliveryFee = Number(zone.deliveryFee)
@@ -172,61 +168,63 @@ export async function POST(request: NextRequest) {
 
     const totalAmount = subtotalAmount + deliveryFee
 
-    // Generate order number
-    const lastOrder = await db.order.findFirst({
-      orderBy: { createdAt: 'desc' },
-      select: { orderNumber: true },
-    })
+    // Generate order number atomically using a counter in a transaction
+    const order = await db.$transaction(async (tx) => {
+      // Use an advisory-style counter: find the max order number and increment
+      const lastOrder = await tx.order.findFirst({
+        orderBy: { createdAt: 'desc' },
+        select: { orderNumber: true },
+      })
 
-    let nextNumber = 1001
-    if (lastOrder && lastOrder.orderNumber) {
-      const match = lastOrder.orderNumber.match(/JAS-(\d+)/)
-      if (match) {
-        nextNumber = parseInt(match[1], 10) + 1
+      let nextNumber = 1001
+      if (lastOrder && lastOrder.orderNumber) {
+        const match = lastOrder.orderNumber.match(/JAS-(\d+)/)
+        if (match) {
+          nextNumber = parseInt(match[1], 10) + 1
+        }
       }
-    }
-    const orderNumber = `JAS-${nextNumber}`
+      const orderNumber = `JAS-${nextNumber}`
 
-    // Create order with items and status history in a transaction
-    const order = await db.order.create({
-      data: {
-        orderNumber,
-        customerName,
-        customerPhone,
-        customerEmail: customerEmail || null,
-        orderType: orderType || 'DELIVERY',
-        paymentMethod: paymentMethod || 'CASH',
-        deliveryZoneId: deliveryZoneId || null,
-        deliveryAddressLine1: deliveryAddressLine1 || null,
-        deliveryCity: deliveryCity || null,
-        deliveryNote: deliveryNote || null,
-        kitchenNote: kitchenNote || null,
-        subtotalAmount,
-        deliveryFee,
-        totalAmount,
-        items: {
-          create: orderItemsData,
-        },
-        statusHistory: {
-          create: {
-            status: 'NEW',
+      return tx.order.create({
+        data: {
+          orderNumber,
+          customerName: data.customerName,
+          customerPhone: data.customerPhone,
+          customerEmail: data.customerEmail || null,
+          orderType: data.orderType || 'DELIVERY',
+          paymentMethod: data.paymentMethod || 'CASH',
+          deliveryZoneId: data.deliveryZoneId || null,
+          deliveryAddressLine1: data.deliveryAddressLine1 || null,
+          deliveryCity: data.deliveryCity || null,
+          deliveryNote: data.deliveryNote || null,
+          kitchenNote: data.kitchenNote || null,
+          subtotalAmount,
+          deliveryFee,
+          totalAmount,
+          items: {
+            create: orderItemsData,
+          },
+          statusHistory: {
+            create: {
+              status: 'NEW',
+            },
           },
         },
-      },
-      include: {
-        items: true,
-        statusHistory: {
-          orderBy: { createdAt: 'asc' },
+        include: {
+          items: true,
+          statusHistory: {
+            orderBy: { createdAt: 'asc' },
+          },
+          deliveryZone: true,
         },
-        deliveryZone: true,
-      },
+      })
     })
 
     return NextResponse.json(decimalToNumber(order), { status: 201 })
   } catch (error) {
     console.error('Error creating order:', error)
     return NextResponse.json(
-      { error: 'Failed to create order' },
+      { error: 'Nepodarilo sa vytvoriť objednávku' },
       { status: 500 }
     )
   }

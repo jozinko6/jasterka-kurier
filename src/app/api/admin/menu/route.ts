@@ -1,51 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { decimalToNumber } from '@/lib/decimal-utils'
+import { requireRole } from '@/lib/auth'
+import { createMenuItemSchema, updateMenuItemSchema, validateBody } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const {
-      categoryId,
-      slug,
-      name,
-      description,
-      basePrice,
-      imageUrl,
-      isActive,
-      isFeatured,
-      isAvailable,
-      preparationTimeMinutes,
-    } = body
-
-    if (!categoryId || !slug || !name || basePrice === undefined) {
-      return NextResponse.json(
-        { error: 'Missing required fields: categoryId, slug, name, basePrice' },
-        { status: 400 }
-      )
+    // Only admins can create menu items
+    const authResult = await requireRole(request, ['ADMIN', 'OWNER'])
+    if ('error' in authResult) {
+      return authResult.error
     }
 
+    const body = await request.json()
+
+    // Validate input
+    const validation = validateBody(createMenuItemSchema, body)
+    if ('error' in validation) {
+      return validation.error
+    }
+
+    const data = validation.data
+
     // Check slug uniqueness
-    const existing = await db.menuItem.findUnique({ where: { slug } })
+    const existing = await db.menuItem.findUnique({ where: { slug: data.slug } })
     if (existing) {
       return NextResponse.json(
-        { error: 'Slug already exists' },
+        { error: 'Slug už existuje' },
         { status: 409 }
       )
     }
 
     const menuItem = await db.menuItem.create({
       data: {
-        categoryId,
-        slug,
-        name,
-        description: description || null,
-        basePrice: parseFloat(String(basePrice)),
-        imageUrl: imageUrl || null,
-        isActive: isActive ?? true,
-        isFeatured: isFeatured ?? false,
-        isAvailable: isAvailable ?? true,
-        preparationTimeMinutes: preparationTimeMinutes ?? null,
+        categoryId: data.categoryId,
+        slug: data.slug,
+        name: data.name,
+        description: data.description || null,
+        basePrice: data.basePrice,
+        imageUrl: data.imageUrl || null,
+        isActive: data.isActive ?? true,
+        isFeatured: data.isFeatured ?? false,
+        isAvailable: data.isAvailable ?? true,
+        preparationTimeMinutes: data.preparationTimeMinutes ?? null,
       },
       include: {
         category: true,
@@ -57,7 +54,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating menu item:', error)
     return NextResponse.json(
-      { error: 'Failed to create menu item' },
+      { error: 'Nepodarilo sa vytvoriť položku menu' },
       { status: 500 }
     )
   }
@@ -65,26 +62,33 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { id, ...fields } = body
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Missing required field: id' },
-        { status: 400 }
-      )
+    // Only admins can update menu items
+    const authResult = await requireRole(request, ['ADMIN', 'OWNER'])
+    if ('error' in authResult) {
+      return authResult.error
     }
 
+    const body = await request.json()
+
+    // Validate input
+    const validation = validateBody(updateMenuItemSchema, body)
+    if ('error' in validation) {
+      return validation.error
+    }
+
+    const data = validation.data
+
     // Verify menu item exists
-    const existing = await db.menuItem.findUnique({ where: { id } })
+    const existing = await db.menuItem.findUnique({ where: { id: data.id } })
     if (!existing) {
       return NextResponse.json(
-        { error: 'Menu item not found' },
+        { error: 'Položka menu nenájdená' },
         { status: 404 }
       )
     }
 
     // Build update data from allowed fields
+    const { id, ...fields } = data
     const allowedFields = [
       'categoryId',
       'slug',
@@ -100,11 +104,11 @@ export async function PUT(request: NextRequest) {
 
     const updateData: Record<string, unknown> = {}
     for (const field of allowedFields) {
-      if (fields[field] !== undefined) {
+      if (fields[field as keyof typeof fields] !== undefined) {
         if (field === 'basePrice') {
-          updateData[field] = parseFloat(String(fields[field]))
+          updateData[field] = fields[field as keyof typeof fields]
         } else {
-          updateData[field] = fields[field]
+          updateData[field] = fields[field as keyof typeof fields]
         }
       }
     }
@@ -122,7 +126,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('Error updating menu item:', error)
     return NextResponse.json(
-      { error: 'Failed to update menu item' },
+      { error: 'Nepodarilo sa aktualizovať položku menu' },
       { status: 500 }
     )
   }

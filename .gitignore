@@ -52,3 +52,17 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Database files
+/db/
+
+# Tool results / temp files
+/tool-results/
+/upload/
+
+# Z-AI config
+.zscripts/
+
+# Allow .env.example but not .env
+.env
+!.env.example

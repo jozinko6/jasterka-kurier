@@ -1,9 +1,24 @@
 'use client'
 
+import { useAuthStore } from '@/stores/auth-store'
 import { AdminSection } from '@/components/jasterka/AdminSection'
-import { Shield } from 'lucide-react'
+import { LoginForm } from '@/components/jasterka/LoginForm'
+import { Shield, LogOut } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export default function AdminPage() {
+  const { isAuthenticated, user, logout } = useAuthStore()
+
+  if (!isAuthenticated) {
+    return (
+      <LoginForm
+        requiredRole={['ADMIN', 'OWNER']}
+        title="Admin — Prihlásenie"
+        description="Prihláste sa pre prístup do administračného panelu"
+      />
+    )
+  }
+
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f8f9fa' }}>
       <header className="border-b px-4 py-3 flex items-center justify-between" style={{ borderColor: '#e0e0e0', backgroundColor: 'white' }}>
@@ -13,15 +28,26 @@ export default function AdminPage() {
           </div>
           <div>
             <h1 className="font-bold text-lg" style={{ color: '#4f7f2a' }}>Admin — Pizza Jašterka</h1>
-            <p className="text-xs text-muted-foreground">Správa prevádzky</p>
+            <p className="text-xs text-muted-foreground">Prihlásený: {user?.email} ({user?.role})</p>
           </div>
         </div>
-        <a
-          href="/"
-          className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"
-        >
-          ← Objednávka
-        </a>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4 mr-1" />
+            Odhlásiť
+          </Button>
+          <a
+            href="/"
+            className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"
+          >
+            ← Objednávka
+          </a>
+        </div>
       </header>
       <main className="flex-1 overflow-hidden">
         <AdminSection />

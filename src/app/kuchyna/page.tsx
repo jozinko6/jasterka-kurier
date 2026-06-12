@@ -1,12 +1,26 @@
 'use client'
 
+import { useAuthStore } from '@/stores/auth-store'
 import { KitchenSection } from '@/components/jasterka/KitchenSection'
+import { LoginForm } from '@/components/jasterka/LoginForm'
 import { PWAInstallBanner, PWAInstallInstructions } from '@/components/jasterka/PWAInstallBanner'
 import { useServiceWorker } from '@/hooks/useServiceWorker'
-import { ChefHat } from 'lucide-react'
+import { ChefHat, LogOut } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export default function KitchenPage() {
   useServiceWorker('/sw-kuchyna.js')
+  const { isAuthenticated, user, logout } = useAuthStore()
+
+  if (!isAuthenticated) {
+    return (
+      <LoginForm
+        requiredRole={['ADMIN', 'KITCHEN', 'OWNER']}
+        title="Kuchyňa — Prihlásenie"
+        description="Prihláste sa pre prístup do kuchynského panelu"
+      />
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#1a1a1a' }}>
@@ -17,11 +31,20 @@ export default function KitchenPage() {
           </div>
           <div>
             <h1 className="font-bold text-lg text-white">Kuchyňa — Pizza Jašterka</h1>
-            <p className="text-xs text-gray-400">Panel pre kuchynský personál</p>
+            <p className="text-xs text-gray-400">Prihlásený: {user?.email} ({user?.role})</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <PWAInstallInstructions appName="Kuchyňa" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            className="text-gray-400 hover:text-white"
+          >
+            <LogOut className="h-4 w-4 mr-1" />
+            Odhlásiť
+          </Button>
           <a
             href="/"
             className="text-gray-400 hover:text-white text-sm flex items-center gap-1 transition-colors"

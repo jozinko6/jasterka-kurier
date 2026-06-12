@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { authFetch } from '@/stores/auth-store'
 import { toast } from 'sonner'
 import type { Order, OrderStatus, Courier } from '@/lib/types'
 import { formatPrice, getStatusColor, ORDER_STATUS_LABELS, COURIER_STATUS_LABELS, VEHICLE_TYPE_LABELS } from '@/lib/types'
@@ -36,14 +37,14 @@ export function CourierSection() {
 
   const { data: couriers, isLoading: couriersLoading } = useQuery<Courier[]>({
     queryKey: ['couriers'],
-    queryFn: () => fetch('/api/couriers').then(r => r.json()),
+    queryFn: () => authFetch('/api/couriers').then(r => r.json()),
   })
 
   const selectedCourier = couriers?.find(c => c.id === selectedCourierId)
 
   const updateCourierMutation = useMutation({
     mutationFn: async ({ courierId, status }: { courierId: string; status: string }) => {
-      const res = await fetch('/api/couriers', {
+      const res = await authFetch('/api/couriers', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ courierId, status }),
@@ -59,7 +60,7 @@ export function CourierSection() {
 
   const updateOrderMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
-      const res = await fetch(`/api/orders/${orderId}`, {
+      const res = await authFetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -171,7 +172,7 @@ function CourierDashboard({
   // Fetch assigned orders
   const { data: orders } = useQuery<Order[]>({
     queryKey: ['courier-orders'],
-    queryFn: () => fetch('/api/orders?status=ASSIGNED_TO_COURIER').then(r => r.json()),
+    queryFn: () => authFetch('/api/orders?status=ASSIGNED_TO_COURIER').then(r => r.json()),
     enabled: isOnline,
     refetchInterval: 10000,
   })
@@ -179,7 +180,7 @@ function CourierDashboard({
   // Also fetch orders in relevant statuses
   const { data: pickupOrders } = useQuery<Order[]>({
     queryKey: ['pickup-orders'],
-    queryFn: () => fetch('/api/orders?status=PICKED_UP').then(r => r.json()),
+    queryFn: () => authFetch('/api/orders?status=PICKED_UP').then(r => r.json()),
     enabled: isOnline,
     refetchInterval: 10000,
   })
@@ -187,7 +188,7 @@ function CourierDashboard({
   // Fetch earnings
   const { data: earningsData } = useQuery({
     queryKey: ['courier-earnings', courier.id],
-    queryFn: () => fetch(`/api/courier-earnings?courierId=${courier.id}`).then(r => r.json()),
+    queryFn: () => authFetch(`/api/courier-earnings?courierId=${courier.id}`).then(r => r.json()),
   })
 
   const assignedOrders = [
