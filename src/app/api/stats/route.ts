@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { decimalToNumber } from '@/lib/decimal-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
       select: { totalAmount: true },
     })
 
-    const todaysRevenue = todaysOrders.reduce((sum, order) => sum + order.totalAmount, 0)
+    const todaysRevenue = todaysOrders.reduce((sum, order) => sum + Number(order.totalAmount), 0)
     const todaysOrderCount = todaysOrders.length
 
     return NextResponse.json({

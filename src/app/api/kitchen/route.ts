@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { OrderStatus } from '@prisma/client'
+import { decimalToNumber } from '@/lib/decimal-utils'
 
 const KITCHEN_STATUSES: OrderStatus[] = [
   'NEW',
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(orders)
+    return NextResponse.json(decimalToNumber(orders))
   } catch (error) {
     console.error('Error fetching kitchen orders:', error)
     return NextResponse.json(

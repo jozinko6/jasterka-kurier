@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { decimalToNumber } from '@/lib/decimal-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,18 +52,18 @@ export async function GET(request: NextRequest) {
       })
 
       return NextResponse.json({
-        earnings,
+        earnings: decimalToNumber(earnings),
         summary: {
-          totalBaseAmount: summary._sum.baseAmount || 0,
-          totalZoneBonus: summary._sum.zoneBonusAmount || 0,
-          totalAdjustments: summary._sum.manualAdjustmentAmount || 0,
-          totalEarnings: summary._sum.totalAmount || 0,
+          totalBaseAmount: Number(summary._sum.baseAmount) || 0,
+          totalZoneBonus: Number(summary._sum.zoneBonusAmount) || 0,
+          totalAdjustments: Number(summary._sum.manualAdjustmentAmount) || 0,
+          totalEarnings: Number(summary._sum.totalAmount) || 0,
           deliveryCount: summary._count,
         },
       })
     }
 
-    return NextResponse.json(earnings)
+    return NextResponse.json(decimalToNumber(earnings))
   } catch (error) {
     console.error('Error fetching courier earnings:', error)
     return NextResponse.json(

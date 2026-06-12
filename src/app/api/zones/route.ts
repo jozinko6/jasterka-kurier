@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { decimalToNumber } from '@/lib/decimal-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
       orderBy: { priority: 'asc' },
     })
 
-    return NextResponse.json(zones)
+    return NextResponse.json(decimalToNumber(zones))
   } catch (error) {
     console.error('Error fetching delivery zones:', error)
     return NextResponse.json(

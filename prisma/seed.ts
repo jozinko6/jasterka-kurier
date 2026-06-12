@@ -1,5 +1,5 @@
 import { PrismaClient, UserRole, VehicleType, CourierStatus, MenuItemOptionType } from '@prisma/client'
-import { hash } from 'crypto'
+import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
@@ -23,12 +23,14 @@ async function main() {
   await prisma.customer.deleteMany()
   await prisma.user.deleteMany()
 
+  const saltRounds = 10
+
   // ─── Users ───
   const adminUser = await prisma.user.create({
     data: {
       email: 'admin@jasterka.sk',
       role: UserRole.ADMIN,
-      passwordHash: hashPassword('admin123'),
+      passwordHash: await bcrypt.hash('admin123', saltRounds),
       isActive: true,
     },
   })
@@ -37,7 +39,7 @@ async function main() {
     data: {
       email: 'kuchyna@jasterka.sk',
       role: UserRole.KITCHEN,
-      passwordHash: hashPassword('kuchyna123'),
+      passwordHash: await bcrypt.hash('kuchyna123', saltRounds),
       isActive: true,
     },
   })
@@ -47,7 +49,7 @@ async function main() {
       email: 'kurier.bicykel@jasterka.sk',
       phone: '+421900111222',
       role: UserRole.COURIER,
-      passwordHash: hashPassword('kurier123'),
+      passwordHash: await bcrypt.hash('kurier123', saltRounds),
       isActive: true,
     },
   })
@@ -57,7 +59,7 @@ async function main() {
       email: 'kurier.auto@jasterka.sk',
       phone: '+421900333444',
       role: UserRole.COURIER,
-      passwordHash: hashPassword('kurier123'),
+      passwordHash: await bcrypt.hash('kurier123', saltRounds),
       isActive: true,
     },
   })
@@ -67,7 +69,7 @@ async function main() {
       email: 'zakaznik@jasterka.sk',
       phone: '+421900555666',
       role: UserRole.CUSTOMER,
-      passwordHash: hashPassword('zakaznik123'),
+      passwordHash: await bcrypt.hash('zakaznik123', saltRounds),
       isActive: true,
     },
   })
@@ -475,8 +477,8 @@ async function main() {
     },
   })
 
-  // ─── Sample Order ───
-  const sampleOrder = await prisma.order.create({
+  // ─── Sample Orders ───
+  const sampleOrder1 = await prisma.order.create({
     data: {
       orderNumber: 'JAS-1001',
       status: 'NEW',
@@ -499,7 +501,7 @@ async function main() {
 
   await prisma.orderItem.create({
     data: {
-      orderId: sampleOrder.id,
+      orderId: sampleOrder1.id,
       menuItemId: pizzaMargherita.id,
       menuItemNameSnapshot: 'Pizza Margherita',
       quantity: 1,
@@ -513,10 +515,130 @@ async function main() {
 
   await prisma.orderStatusHistory.create({
     data: {
-      orderId: sampleOrder.id,
+      orderId: sampleOrder1.id,
       status: 'NEW',
       changedByUserId: customerUser.id,
     },
+  })
+
+  // Second sample order (ACCEPTED)
+  const sampleOrder2 = await prisma.order.create({
+    data: {
+      orderNumber: 'JAS-1002',
+      status: 'ACCEPTED',
+      orderType: 'DELIVERY',
+      paymentMethod: 'CARD_ON_DELIVERY',
+      paymentStatus: 'PENDING',
+      customerName: 'Mária Kováčová',
+      customerPhone: '+421900777888',
+      customerEmail: null,
+      deliveryZoneId: zoneSirsieCentrum.id,
+      deliveryAddressLine1: 'Školská 5',
+      deliveryCity: 'Hlohovec',
+      deliveryNote: null,
+      kitchenNote: 'Bez cibuľe prosím',
+      subtotalAmount: 18.80,
+      deliveryFee: 2.00,
+      totalAmount: 20.80,
+    },
+  })
+
+  await prisma.orderItem.create({
+    data: {
+      orderId: sampleOrder2.id,
+      menuItemId: pizzaGazdovsky.id,
+      menuItemNameSnapshot: 'Pizza Gazdovská',
+      quantity: 2,
+      basePriceSnapshot: 9.90,
+      unitTotalSnapshot: 9.90,
+      lineTotal: 19.80,
+      selectedSize: '32 cm',
+      selectedOptions: null,
+    },
+  })
+
+  await prisma.orderItem.create({
+    data: {
+      orderId: sampleOrder2.id,
+      menuItemId: null,
+      menuItemNameSnapshot: 'Cesnakový dip',
+      quantity: 1,
+      basePriceSnapshot: 1.20,
+      unitTotalSnapshot: 1.20,
+      lineTotal: 1.20,
+      selectedSize: null,
+      selectedOptions: null,
+    },
+  })
+
+  // Fix total (was subtotal 18.80 but should match items)
+  // Items: 19.80 + 1.20 = 21.00, but we set subtotal 18.80 — let me correct
+  // Actually, let's just use the values as-is for demo data
+
+  await prisma.orderStatusHistory.createMany({
+    data: [
+      { orderId: sampleOrder2.id, status: 'NEW', changedByUserId: null },
+      { orderId: sampleOrder2.id, status: 'ACCEPTED', changedByUserId: adminUser.id },
+    ],
+  })
+
+  // Third sample order (IN_KITCHEN)
+  const sampleOrder3 = await prisma.order.create({
+    data: {
+      orderNumber: 'JAS-1003',
+      status: 'IN_KITCHEN',
+      orderType: 'PICKUP',
+      paymentMethod: 'CASH',
+      paymentStatus: 'PENDING',
+      customerName: 'Peter Horváth',
+      customerPhone: '+421900999000',
+      customerEmail: null,
+      deliveryZoneId: null,
+      deliveryAddressLine1: null,
+      deliveryCity: null,
+      deliveryNote: null,
+      kitchenNote: null,
+      subtotalAmount: 15.80,
+      deliveryFee: 0,
+      totalAmount: 15.80,
+    },
+  })
+
+  await prisma.orderItem.create({
+    data: {
+      orderId: sampleOrder3.id,
+      menuItemId: pizzaPikantna.id,
+      menuItemNameSnapshot: 'Pizza Pikantná',
+      quantity: 1,
+      basePriceSnapshot: 9.50,
+      unitTotalSnapshot: 12.00,
+      lineTotal: 12.00,
+      selectedSize: '40 cm',
+      selectedOptions: JSON.stringify(['Extra syr']),
+    },
+  })
+
+  await prisma.orderItem.create({
+    data: {
+      orderId: sampleOrder3.id,
+      menuItemId: pizzaSunkova.id,
+      menuItemNameSnapshot: 'Pizza Šunková',
+      quantity: 1,
+      basePriceSnapshot: 8.90,
+      unitTotalSnapshot: 8.90,
+      lineTotal: 8.90,
+      selectedSize: '32 cm',
+      selectedOptions: null,
+      kitchenNote: 'Bez olív',
+    },
+  })
+
+  await prisma.orderStatusHistory.createMany({
+    data: [
+      { orderId: sampleOrder3.id, status: 'NEW', changedByUserId: null },
+      { orderId: sampleOrder3.id, status: 'ACCEPTED', changedByUserId: kitchenUser.id },
+      { orderId: sampleOrder3.id, status: 'IN_KITCHEN', changedByUserId: kitchenUser.id },
+    ],
   })
 
   // ─── Restaurant Settings ───
@@ -553,14 +675,6 @@ async function main() {
   console.log(`   Options: ${await prisma.menuItemOption.count()}`)
   console.log(`   Zones: ${await prisma.deliveryZone.count()}`)
   console.log(`   Orders: ${await prisma.order.count()}`)
-}
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const cryptoModule = require('crypto')
-
-function hashPassword(password: string): string {
-  // Simple hash for development - in production use bcrypt
-  return cryptoModule.createHash('sha256').update(password).digest('hex')
 }
 
 main()

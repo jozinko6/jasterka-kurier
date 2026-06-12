@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { OrderStatus } from '@prisma/client'
+import { decimalToNumber } from '@/lib/decimal-utils'
 
 export async function GET(
   request: NextRequest,
@@ -52,7 +53,7 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(order)
+    return NextResponse.json(decimalToNumber(order))
   } catch (error) {
     console.error('Error fetching order:', error)
     return NextResponse.json(
@@ -129,7 +130,7 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json(updatedOrder)
+    return NextResponse.json(decimalToNumber(updatedOrder))
   } catch (error) {
     console.error('Error updating order:', error)
     return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { OrderStatus } from '@prisma/client'
+import { decimalToNumber } from '@/lib/decimal-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(orders)
+    return NextResponse.json(decimalToNumber(orders))
   } catch (error) {
     console.error('Error fetching orders:', error)
     return NextResponse.json(
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const basePrice = menuItem.basePrice
+      const basePrice = Number(menuItem.basePrice)
       let unitTotal = basePrice
 
       // Apply size price delta
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
             opt.name === item.selectedSize
         )
         if (sizeOption) {
-          unitTotal += sizeOption.priceDelta
+          unitTotal += Number(sizeOption.priceDelta)
         }
       }
 
@@ -133,8 +134,8 @@ export async function POST(request: NextRequest) {
             (opt) => opt.name === optName
           )
           if (option) {
-            unitTotal += option.priceDelta
-            selectedOptionDeltas.push({ name: option.name, price: option.priceDelta })
+            unitTotal += Number(option.priceDelta)
+            selectedOptionDeltas.push({ name: option.name, price: Number(option.priceDelta) })
           }
         }
       }
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest) {
         where: { id: deliveryZoneId },
       })
       if (zone) {
-        deliveryFee = zone.deliveryFee
+        deliveryFee = Number(zone.deliveryFee)
       }
     }
 
@@ -221,7 +222,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(order, { status: 201 })
+    return NextResponse.json(decimalToNumber(order), { status: 201 })
   } catch (error) {
     console.error('Error creating order:', error)
     return NextResponse.json(

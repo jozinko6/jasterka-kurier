@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { decimalToNumber } from '@/lib/decimal-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,10 +17,10 @@ export async function GET(request: NextRequest) {
           minimumOrderAmount: 0,
         },
       })
-      return NextResponse.json(defaultSettings)
+      return NextResponse.json(decimalToNumber(defaultSettings))
     }
 
-    return NextResponse.json(settings)
+    return NextResponse.json(decimalToNumber(settings))
   } catch (error) {
     console.error('Error fetching settings:', error)
     return NextResponse.json(
@@ -45,12 +46,12 @@ export async function PUT(request: NextRequest) {
           isOpen: body.isOpen ?? true,
           customerMessage: body.customerMessage || null,
           averagePrepMinutes: body.averagePrepMinutes ?? 30,
-          minimumOrderAmount: body.minimumOrderAmount ?? 0,
+          minimumOrderAmount: parseFloat(String(body.minimumOrderAmount ?? 0)),
           storePhone: body.storePhone || null,
           storeAddress: body.storeAddress || null,
         },
       })
-      return NextResponse.json(settings)
+      return NextResponse.json(decimalToNumber(settings))
     }
 
     // Update existing settings
@@ -68,7 +69,11 @@ export async function PUT(request: NextRequest) {
 
     for (const field of allowedFields) {
       if (body[field] !== undefined) {
-        updateData[field] = body[field]
+        if (field === 'minimumOrderAmount') {
+          updateData[field] = parseFloat(String(body[field]))
+        } else {
+          updateData[field] = body[field]
+        }
       }
     }
 
@@ -77,7 +82,7 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     })
 
-    return NextResponse.json(updatedSettings)
+    return NextResponse.json(decimalToNumber(updatedSettings))
   } catch (error) {
     console.error('Error updating settings:', error)
     return NextResponse.json(

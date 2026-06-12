@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { decimalToNumber } from '@/lib/decimal-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(menuItem, { status: 201 })
+    return NextResponse.json(decimalToNumber(menuItem), { status: 201 })
   } catch (error) {
     console.error('Error creating menu item:', error)
     return NextResponse.json(
@@ -117,7 +118,7 @@ export async function PUT(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(updatedMenuItem)
+    return NextResponse.json(decimalToNumber(updatedMenuItem))
   } catch (error) {
     console.error('Error updating menu item:', error)
     return NextResponse.json(

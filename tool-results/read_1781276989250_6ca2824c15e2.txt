@@ -1,0 +1,1076 @@
+     1→'use client'
+     2→
+     3→import { useState, useMemo } from 'react'
+     4→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+     5→import { toast } from 'sonner'
+     6→import type { MenuCategory, MenuItem, MenuItemOption, DeliveryZone, Order, OrderStatus } from '@/lib/types'
+     7→import { formatPrice, getStatusColor, ORDER_STATUS_LABELS } from '@/lib/types'
+     8→import { useCartStore } from '@/stores/cart-store'
+     9→import { Button } from '@/components/ui/button'
+    10→import { Card, CardContent } from '@/components/ui/card'
+    11→import { Badge } from '@/components/ui/badge'
+    12→import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+    13→import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+    14→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    15→import { Input } from '@/components/ui/input'
+    16→import { Textarea } from '@/components/ui/textarea'
+    17→import { Label } from '@/components/ui/label'
+    18→import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+    19→import { Checkbox } from '@/components/ui/checkbox'
+    20→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    21→import { Separator } from '@/components/ui/separator'
+    22→import { ScrollArea } from '@/components/ui/scroll-area'
+    23→import { Skeleton } from '@/components/ui/skeleton'
+    24→import {
+    25→  ShoppingCart,
+    26→  Plus,
+    27→  Minus,
+    28→  Trash2,
+    29→  Pizza,
+    30→  Truck,
+    31→  User,
+    32→  Phone,
+    33→  Mail,
+    34→  MapPin,
+    35→  MessageSquare,
+    36→  CreditCard,
+    37→  ChevronRight,
+    38→  ArrowLeft,
+    39→  Check,
+    40→  Clock,
+    41→  Package,
+    42→  X,
+    43→  Info,
+    44→} from 'lucide-react'
+    45→
+    46→// ─── Menu Browsing ───
+    47→export function OrderSection() {
+    48→  const [configItem, setConfigItem] = useState<MenuItem | null>(null)
+    49→  const [configOpen, setConfigOpen] = useState(false)
+    50→  const [cartOpen, setCartOpen] = useState(false)
+    51→  const [checkoutOpen, setCheckoutOpen] = useState(false)
+    52→  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null)
+    53→
+    54→  const { data: categories, isLoading } = useQuery<MenuCategory[]>({
+    55→    queryKey: ['menu'],
+    56→    queryFn: () => fetch('/api/menu').then(r => r.json()),
+    57→  })
+    58→
+    59→  const cartStore = useCartStore()
+    60→
+    61→  const [selectedCategory, setSelectedCategory] = useState<string>('')
+    62→  const effectiveCategory = useMemo(() => {
+    63→    if (selectedCategory) return selectedCategory
+    64→    if (categories && categories.length > 0) return categories[0].id
+    65→    return ''
+    66→  }, [selectedCategory, categories])
+    67→
+    68→  if (trackingOrderId) {
+    69→    return (
+    70→      <OrderTracking
+    71→        orderId={trackingOrderId}
+    72→        onBack={() => setTrackingOrderId(null)}
+    73→      />
+    74→    )
+    75→  }
+    76→
+    77→  return (
+    78→    <div className="flex flex-col h-full">
+    79→      {/* Header with cart icon */}
+    80→      <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border)' }}>
+    81→        <div>
+    82→          <h2 className="text-xl font-bold" style={{ color: '#4f7f2a' }}>Naše menu</h2>
+    83→          <p className="text-sm text-muted-foreground">Vyberte si z našej ponuky</p>
+    84→        </div>
+    85→        <Button
+    86→          variant="outline"
+    87→          size="icon"
+    88→          className="relative"
+    89→          onClick={() => setCartOpen(true)}
+    90→        >
+    91→          <ShoppingCart className="h-5 w-5" />
+    92→          {cartStore.getItemCount() > 0 && (
+    93→            <Badge
+    94→              className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
+    95→              style={{ backgroundColor: '#c73325', color: 'white' }}
+    96→            >
+    97→              {cartStore.getItemCount()}
+    98→            </Badge>
+    99→          )}
+   100→        </Button>
+   101→      </div>
+   102→
+   103→      {/* Category tabs */}
+   104→      {isLoading ? (
+   105→        <div className="p-4 space-y-4">
+   106→          <div className="flex gap-2">
+   107→            {[1, 2, 3, 4].map(i => (
+   108→              <Skeleton key={i} className="h-10 w-24 rounded-full" />
+   109→            ))}
+   110→          </div>
+   111→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   112→            {[1, 2, 3, 4, 5, 6].map(i => (
+   113→              <Skeleton key={i} className="h-48 rounded-xl" />
+   114→            ))}
+   115→          </div>
+   116→        </div>
+   117→      ) : (
+   118→        <Tabs value={effectiveCategory} onValueChange={setSelectedCategory} className="flex-1 flex flex-col">
+   119→          <div className="px-4 pt-2">
+   120→            <TabsList className="w-full flex h-auto flex-wrap gap-1 bg-transparent p-0">
+   121→              {categories?.map((cat) => (
+   122→                <TabsTrigger
+   123→                  key={cat.id}
+   124→                  value={cat.id}
+   125→                  className="data-[state=active]:text-white data-[state=active]:shadow-sm rounded-full px-4 py-2 text-sm"
+   126→                  style={{
+   127→                    backgroundColor: effectiveCategory === cat.id ? '#4f7f2a' : 'transparent',
+   128→                    color: effectiveCategory === cat.id ? 'white' : undefined,
+   129→                  }}
+   130→                >
+   131→                  {cat.name}
+   132→                </TabsTrigger>
+   133→              ))}
+   134→            </TabsList>
+   135→          </div>
+   136→
+   137→          <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+   138→            {categories?.map((cat) => (
+   139→              <TabsContent key={cat.id} value={cat.id} className="mt-0">
+   140→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   141→                  {cat.menuItems
+   142→                    .filter(item => item.isAvailable)
+   143→                    .map((item) => (
+   144→                      <MenuCard
+   145→                        key={item.id}
+   146→                        item={item}
+   147→                        categorySlug={cat.slug}
+   148→                        onAdd={() => {
+   149→                          if (item.options.length > 0) {
+   150→                            setConfigItem(item)
+   151→                            setConfigOpen(true)
+   152→                          } else {
+   153→                            cartStore.addItem(item, null, [], [], '', 1)
+   154→                            toast.success(`${item.name} pridané do košíka`)
+   155→                          }
+   156→                        }}
+   157→                      />
+   158→                    ))}
+   159→                </div>
+   160→                {cat.menuItems.filter(item => item.isAvailable).length === 0 && (
+   161→                  <div className="text-center py-12 text-muted-foreground">
+   162→                    <Pizza className="h-12 w-12 mx-auto mb-3 opacity-30" />
+   163→                    <p>Žiadne položky v tejto kategórii</p>
+   164→                  </div>
+   165→                )}
+   166→              </TabsContent>
+   167→            ))}
+   168→          </div>
+   169→        </Tabs>
+   170→      )}
+   171→
+   172→      {/* Item Configurator Dialog */}
+   173→      {configItem && (
+   174→        <ItemConfigurator
+   175→          item={configItem}
+   176→          open={configOpen}
+   177→          onOpenChange={setConfigOpen}
+   178→        />
+   179→      )}
+   180→
+   181→      {/* Cart Sheet */}
+   182→      <CartSheet
+   183→        open={cartOpen}
+   184→        onOpenChange={setCartOpen}
+   185→        onCheckout={() => {
+   186→          setCartOpen(false)
+   187→          setCheckoutOpen(true)
+   188→        }}
+   189→      />
+   190→
+   191→      {/* Checkout Sheet */}
+   192→      <CheckoutSheet
+   193→        open={checkoutOpen}
+   194→        onOpenChange={setCheckoutOpen}
+   195→        onOrderCreated={(orderId) => {
+   196→          setCheckoutOpen(false)
+   197→          setTrackingOrderId(orderId)
+   198→        }}
+   199→      />
+   200→    </div>
+   201→  )
+   202→}
+   203→
+   204→// ─── Menu Card ───
+   205→function MenuCard({ item, categorySlug, onAdd }: { item: MenuItem; categorySlug: string; onAdd: () => void }) {
+   206→  const imgSrc = categorySlug === 'pizza' ? '/pizza-hero.png' : '/pizza-lizard.png'
+   207→
+   208→  return (
+   209→    <Card className="group overflow-hidden transition-all hover:shadow-lg cursor-pointer border-border/60" onClick={onAdd}>
+   210→      <div
+   211→        className="h-36 flex items-center justify-center relative overflow-hidden"
+   212→        style={{ backgroundColor: '#fff4df' }}
+   213→      >
+   214→        <img
+   215→          src={imgSrc}
+   216→          alt={item.name}
+   217→          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+   218→        />
+   219→        {item.isFeatured && (
+   220→          <Badge className="absolute top-2 right-2 text-xs" style={{ backgroundColor: '#c73325', color: 'white' }}>
+   221→            Akcia
+   222→          </Badge>
+   223→        )}
+   224→      </div>
+   225→      <CardContent className="p-4">
+   226→        <h3 className="font-semibold text-base mb-1">{item.name}</h3>
+   227→        {item.description && (
+   228→          <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{item.description}</p>
+   229→        )}
+   230→        <div className="flex items-center justify-between">
+   231→          <span className="text-lg font-bold" style={{ color: '#4f7f2a' }}>
+   232→            od {formatPrice(item.basePrice)}
+   233→          </span>
+   234→          <Button
+   235→            size="sm"
+   236→            className="gap-1"
+   237→            style={{ backgroundColor: '#4f7f2a', color: 'white' }}
+   238→            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3d6620')}
+   239→            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4f7f2a')}
+   240→          >
+   241→            <Plus className="h-4 w-4" />
+   242→            Pridať
+   243→          </Button>
+   244→        </div>
+   245→        {item.preparationTimeMinutes && item.preparationTimeMinutes > 0 && (
+   246→          <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+   247→            <Clock className="h-3 w-3" />
+   248→            {item.preparationTimeMinutes} min
+   249→          </div>
+   250→        )}
+   251→      </CardContent>
+   252→    </Card>
+   253→  )
+   254→}
+   255→
+   256→// ─── Item Configurator ───
+   257→function ItemConfigurator({
+   258→  item,
+   259→  open,
+   260→  onOpenChange,
+   261→}: {
+   262→  item: MenuItem
+   263→  open: boolean
+   264→  onOpenChange: (open: boolean) => void
+   265→}) {
+   266→  const cartStore = useCartStore()
+   267→  const sizeOptions = item.options.filter(o => o.optionType === 'SIZE' && o.isActive)
+   268→  const defaultSize = sizeOptions.find(o => o.isDefault) || sizeOptions[0] || null
+   269→  const [selectedSize, setSelectedSize] = useState<MenuItemOption | null>(defaultSize)
+   270→  const [selectedExtras, setSelectedExtras] = useState<MenuItemOption[]>([])
+   271→  const [selectedRemoves, setSelectedRemoves] = useState<MenuItemOption[]>([])
+   272→  const [kitchenNote, setKitchenNote] = useState('')
+   273→  const [quantity, setQuantity] = useState(1)
+   274→
+   275→  const extraOptions = item.options.filter(o => o.optionType === 'EXTRA' && o.isActive)
+   276→  const removeOptions = item.options.filter(o => o.optionType === 'REMOVE' && o.isActive)
+   277→
+   278→  const unitTotal = item.basePrice
+   279→    + (selectedSize?.priceDelta || 0)
+   280→    + selectedExtras.reduce((sum, e) => sum + e.priceDelta, 0)
+   281→
+   282→  const totalPrice = unitTotal * quantity
+   283→
+   284→  const handleAdd = () => {
+   285→    cartStore.addItem(item, selectedSize, selectedExtras, selectedRemoves, kitchenNote, quantity)
+   286→    toast.success(`${item.name} pridané do košíka`)
+   287→    onOpenChange(false)
+   288→  }
+   289→
+   290→  const toggleExtra = (option: MenuItemOption) => {
+   291→    setSelectedExtras(prev =>
+   292→      prev.find(o => o.id === option.id)
+   293→        ? prev.filter(o => o.id !== option.id)
+   294→        : [...prev, option]
+   295→    )
+   296→  }
+   297→
+   298→  const toggleRemove = (option: MenuItemOption) => {
+   299→    setSelectedRemoves(prev =>
+   300→      prev.find(o => o.id === option.id)
+   301→        ? prev.filter(o => o.id !== option.id)
+   302→        : [...prev, option]
+   303→    )
+   304→  }
+   305→
+   306→  return (
+   307→    <Dialog open={open} onOpenChange={onOpenChange}>
+   308→      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+   309→        <DialogHeader>
+   310→          <DialogTitle className="text-xl" style={{ color: '#4f7f2a' }}>{item.name}</DialogTitle>
+   311→          <DialogDescription>{item.description || 'Nastavte si položku podľa chuti'}</DialogDescription>
+   312→        </DialogHeader>
+   313→
+   314→        <div className="space-y-6 mt-2">
+   315→          {/* Size selection */}
+   316→          {sizeOptions.length > 0 && (
+   317→            <div>
+   318→              <Label className="text-base font-semibold mb-3 block">Veľkosť</Label>
+   319→              <RadioGroup
+   320→                value={selectedSize?.id || ''}
+   321→                onValueChange={(val) => {
+   322→                  const opt = sizeOptions.find(o => o.id === val)
+   323→                  if (opt) setSelectedSize(opt)
+   324→                }}
+   325→              >
+   326→                {sizeOptions.map((opt) => (
+   327→                  <div
+   328→                    key={opt.id}
+   329→                    className="flex items-center space-x-2 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+   330→                    style={{
+   331→                      borderColor: selectedSize?.id === opt.id ? '#4f7f2a' : undefined,
+   332→                      backgroundColor: selectedSize?.id === opt.id ? '#f0f7ec' : undefined,
+   333→                    }}
+   334→                    onClick={() => setSelectedSize(opt)}
+   335→                  >
+   336→                    <RadioGroupItem value={opt.id} style={{ color: '#4f7f2a' }} />
+   337→                    <Label className="flex-1 cursor-pointer font-normal">{opt.name}</Label>
+   338→                    {opt.priceDelta > 0 && (
+   339→                      <span className="text-sm font-medium" style={{ color: '#4f7f2a' }}>
+   340→                        +{formatPrice(opt.priceDelta)}
+   341→                      </span>
+   342→                    )}
+   343→                    {opt.priceDelta === 0 && (
+   344→                      <span className="text-sm text-muted-foreground">základná</span>
+   345→                    )}
+   346→                  </div>
+   347→                ))}
+   348→              </RadioGroup>
+   349→            </div>
+   350→          )}
+   351→
+   352→          {/* Extra ingredients */}
+   353→          {extraOptions.length > 0 && (
+   354→            <div>
+   355→              <Label className="text-base font-semibold mb-3 block">Extra suroviny</Label>
+   356→              <div className="space-y-2">
+   357→                {extraOptions.map((opt) => (
+   358→                  <div
+   359→                    key={opt.id}
+   360→                    className="flex items-center space-x-2 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+   361→                    style={{
+   362→                      borderColor: selectedExtras.find(o => o.id === opt.id) ? '#4f7f2a' : undefined,
+   363→                      backgroundColor: selectedExtras.find(o => o.id === opt.id) ? '#f0f7ec' : undefined,
+   364→                    }}
+   365→                    onClick={() => toggleExtra(opt)}
+   366→                  >
+   367→                    <Checkbox
+   368→                      checked={!!selectedExtras.find(o => o.id === opt.id)}
+   369→                      onCheckedChange={() => toggleExtra(opt)}
+   370→                      style={{ color: '#4f7f2a' }}
+   371→                    />
+   372→                    <Label className="flex-1 cursor-pointer font-normal">{opt.name}</Label>
+   373→                    <span className="text-sm font-medium" style={{ color: '#4f7f2a' }}>
+   374→                      +{formatPrice(opt.priceDelta)}
+   375→                    </span>
+   376→                  </div>
+   377→                ))}
+   378→              </div>
+   379→            </div>
+   380→          )}
+   381→
+   382→          {/* Remove ingredients */}
+   383→          {removeOptions.length > 0 && (
+   384→            <div>
+   385→              <Label className="text-base font-semibold mb-3 block">Bez suroviny</Label>
+   386→              <div className="space-y-2">
+   387→                {removeOptions.map((opt) => (
+   388→                  <div
+   389→                    key={opt.id}
+   390→                    className="flex items-center space-x-2 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+   391→                    style={{
+   392→                      borderColor: selectedRemoves.find(o => o.id === opt.id) ? '#c73325' : undefined,
+   393→                      backgroundColor: selectedRemoves.find(o => o.id === opt.id) ? '#fef2f0' : undefined,
+   394→                    }}
+   395→                    onClick={() => toggleRemove(opt)}
+   396→                  >
+   397→                    <Checkbox
+   398→                      checked={!!selectedRemoves.find(o => o.id === opt.id)}
+   399→                      onCheckedChange={() => toggleRemove(opt)}
+   400→                    />
+   401→                    <Label className="flex-1 cursor-pointer font-normal">{opt.name}</Label>
+   402→                  </div>
+   403→                ))}
+   404→              </div>
+   405→            </div>
+   406→          )}
+   407→
+   408→          {/* Kitchen note */}
+   409→          <div>
+   410→            <Label className="text-base font-semibold mb-2 block">Poznámka pre kuchyňu</Label>
+   411→            <Textarea
+   412→              placeholder="Špeciálne požiadavky, alergie..."
+   413→              value={kitchenNote}
+   414→              onChange={(e) => setKitchenNote(e.target.value)}
+   415→              className="resize-none"
+   416→              rows={2}
+   417→            />
+   418→          </div>
+   419→
+   420→          {/* Quantity */}
+   421→          <div>
+   422→            <Label className="text-base font-semibold mb-2 block">Množstvo</Label>
+   423→            <div className="flex items-center gap-3">
+   424→              <Button
+   425→                variant="outline"
+   426→                size="icon"
+   427→                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+   428→              >
+   429→                <Minus className="h-4 w-4" />
+   430→              </Button>
+   431→              <span className="text-xl font-bold w-12 text-center">{quantity}</span>
+   432→              <Button
+   433→                variant="outline"
+   434→                size="icon"
+   435→                onClick={() => setQuantity(quantity + 1)}
+   436→              >
+   437→                <Plus className="h-4 w-4" />
+   438→              </Button>
+   439→            </div>
+   440→          </div>
+   441→
+   442→          <Separator />
+   443→
+   444→          {/* Total and add button */}
+   445→          <div className="flex items-center justify-between">
+   446→            <div>
+   447→              <p className="text-sm text-muted-foreground">Celková cena</p>
+   448→              <p className="text-2xl font-bold" style={{ color: '#4f7f2a' }}>
+   449→                {formatPrice(totalPrice)}
+   450→              </p>
+   451→            </div>
+   452→            <Button
+   453→              size="lg"
+   454→              className="gap-2 text-base px-6"
+   455→              style={{ backgroundColor: '#4f7f2a', color: 'white' }}
+   456→              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3d6620')}
+   457→              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4f7f2a')}
+   458→              onClick={handleAdd}
+   459→            >
+   460→              <ShoppingCart className="h-5 w-5" />
+   461→              Pridať do košíka
+   462→            </Button>
+   463→          </div>
+   464→        </div>
+   465→      </DialogContent>
+   466→    </Dialog>
+   467→  )
+   468→}
+   469→
+   470→// ─── Cart Sheet ───
+   471→function CartSheet({
+   472→  open,
+   473→  onOpenChange,
+   474→  onCheckout,
+   475→}: {
+   476→  open: boolean
+   477→  onOpenChange: (open: boolean) => void
+   478→  onCheckout: () => void
+   479→}) {
+   480→  const cartStore = useCartStore()
+   481→  const { data: zones } = useQuery<DeliveryZone[]>({
+   482→    queryKey: ['zones'],
+   483→    queryFn: () => fetch('/api/zones').then(r => r.json()),
+   484→  })
+   485→
+   486→  const subtotal = cartStore.getSubtotal()
+   487→  const defaultZone = zones?.[0]
+   488→  const deliveryFee = defaultZone?.deliveryFee || 0
+   489→  const total = subtotal + deliveryFee
+   490→
+   491→  return (
+   492→    <Sheet open={open} onOpenChange={onOpenChange}>
+   493→      <SheetContent className="w-full sm:max-w-md flex flex-col">
+   494→        <SheetHeader>
+   495→          <SheetTitle className="flex items-center gap-2">
+   496→            <ShoppingCart className="h-5 w-5" style={{ color: '#4f7f2a' }} />
+   497→            Košík ({cartStore.getItemCount()} položiek)
+   498→          </SheetTitle>
+   499→          <SheetDescription>Vaše vybrané položky</SheetDescription>
+   500→        </SheetHeader>
+   501→
+   502→        <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
+   503→          {cartStore.items.length === 0 ? (
+   504→            <div className="text-center py-12 text-muted-foreground">
+   505→              <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" />
+   506→              <p>Váš košík je prázdny</p>
+   507→              <p className="text-sm mt-1">Pridajte položky z menu</p>
+   508→            </div>
+   509→          ) : (
+   510→            <div className="space-y-3">
+   511→              {cartStore.items.map((ci, index) => (
+   512→                <Card key={index} className="p-3">
+   513→                  <div className="flex justify-between items-start">
+   514→                    <div className="flex-1 min-w-0">
+   515→                      <p className="font-semibold text-sm">{ci.menuItem.name}</p>
+   516→                      <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
+   517→                        {ci.selectedSize && <p>Veľkosť: {ci.selectedSize.name}</p>}
+   518→                        {ci.selectedExtras.length > 0 && (
+   519→                          <p>+ {ci.selectedExtras.map(e => e.name).join(', ')}</p>
+   520→                        )}
+   521→                        {ci.selectedRemoves.length > 0 && (
+   522→                          <p className="text-red-600">- {ci.selectedRemoves.map(r => r.name).join(', ')}</p>
+   523→                        )}
+   524→                        {ci.kitchenNote && <p>Poznámka: {ci.kitchenNote}</p>}
+   525→                      </div>
+   526→                    </div>
+   527→                    <Button
+   528→                      variant="ghost"
+   529→                      size="icon"
+   530→                      className="h-8 w-8 text-muted-foreground hover:text-red-500"
+   531→                      onClick={() => cartStore.removeItem(index)}
+   532→                    >
+   533→                      <X className="h-4 w-4" />
+   534→                    </Button>
+   535→                  </div>
+   536→                  <div className="flex items-center justify-between mt-2">
+   537→                    <div className="flex items-center gap-2">
+   538→                      <Button
+   539→                        variant="outline"
+   540→                        size="icon"
+   541→                        className="h-7 w-7"
+   542→                        onClick={() => cartStore.updateQuantity(index, ci.quantity - 1)}
+   543→                      >
+   544→                        <Minus className="h-3 w-3" />
+   545→                      </Button>
+   546→                      <span className="text-sm font-medium w-6 text-center">{ci.quantity}</span>
+   547→                      <Button
+   548→                        variant="outline"
+   549→                        size="icon"
+   550→                        className="h-7 w-7"
+   551→                        onClick={() => cartStore.updateQuantity(index, ci.quantity + 1)}
+   552→                      >
+   553→                        <Plus className="h-3 w-3" />
+   554→                      </Button>
+   555→                    </div>
+   556→                    <span className="font-semibold text-sm" style={{ color: '#4f7f2a' }}>
+   557→                      {formatPrice(ci.lineTotal)}
+   558→                    </span>
+   559→                  </div>
+   560→                </Card>
+   561→              ))}
+   562→            </div>
+   563→          )}
+   564→        </div>
+   565→
+   566→        {cartStore.items.length > 0 && (
+   567→          <div className="border-t pt-4 space-y-3">
+   568→            <div className="flex justify-between text-sm">
+   569→              <span className="text-muted-foreground">Medzisúčet</span>
+   570→              <span>{formatPrice(subtotal)}</span>
+   571→            </div>
+   572→            <div className="flex justify-between text-sm">
+   573→              <span className="text-muted-foreground">Dopravné</span>
+   574→              <span>{formatPrice(deliveryFee)}</span>
+   575→            </div>
+   576→            <Separator />
+   577→            <div className="flex justify-between font-bold text-lg">
+   578→              <span>Celkom</span>
+   579→              <span style={{ color: '#4f7f2a' }}>{formatPrice(total)}</span>
+   580→            </div>
+   581→            <div className="flex gap-2">
+   582→              <Button
+   583→                variant="outline"
+   584→                className="flex-1"
+   585→                onClick={() => cartStore.clearCart()}
+   586→              >
+   587→                <Trash2 className="h-4 w-4 mr-2" />
+   588→                Vyčistiť
+   589→              </Button>
+   590→              <Button
+   591→                className="flex-1"
+   592→                style={{ backgroundColor: '#4f7f2a', color: 'white' }}
+   593→                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3d6620')}
+   594→                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4f7f2a')}
+   595→                onClick={onCheckout}
+   596→              >
+   597→                Pokračovať
+   598→                <ChevronRight className="h-4 w-4 ml-1" />
+   599→              </Button>
+   600→            </div>
+   601→          </div>
+   602→        )}
+   603→      </SheetContent>
+   604→    </Sheet>
+   605→  )
+   606→}
+   607→
+   608→// ─── Checkout Sheet ───
+   609→function CheckoutSheet({
+   610→  open,
+   611→  onOpenChange,
+   612→  onOrderCreated,
+   613→}: {
+   614→  open: boolean
+   615→  onOpenChange: (open: boolean) => void
+   616→  onOrderCreated: (orderId: string) => void
+   617→}) {
+   618→  const cartStore = useCartStore()
+   619→  const queryClient = useQueryClient()
+   620→
+   621→  const [customerName, setCustomerName] = useState('')
+   622→  const [customerPhone, setCustomerPhone] = useState('')
+   623→  const [customerEmail, setCustomerEmail] = useState('')
+   624→  const [orderType, setOrderType] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY')
+   625→  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD_ON_DELIVERY' | 'CARD_ON_PICKUP'>('CASH')
+   626→  const [deliveryZoneId, setDeliveryZoneId] = useState('')
+   627→  const [deliveryAddress, setDeliveryAddress] = useState('')
+   628→  const [deliveryCity, setDeliveryCity] = useState('')
+   629→  const [deliveryNote, setDeliveryNote] = useState('')
+   630→  const [kitchenNote, setKitchenNote] = useState('')
+   631→
+   632→  const { data: zones } = useQuery<DeliveryZone[]>({
+   633→    queryKey: ['zones'],
+   634→    queryFn: () => fetch('/api/zones').then(r => r.json()),
+   635→  })
+   636→
+   637→  const selectedZone = zones?.find(z => z.id === deliveryZoneId)
+   638→  const subtotal = cartStore.getSubtotal()
+   639→  const deliveryFee = orderType === 'DELIVERY' ? (selectedZone?.deliveryFee || 0) : 0
+   640→  const total = subtotal + deliveryFee
+   641→
+   642→  const createOrderMutation = useMutation({
+   643→    mutationFn: async () => {
+   644→      const items = cartStore.items.map(ci => ({
+   645→        menuItemId: ci.menuItem.id,
+   646→        quantity: ci.quantity,
+   647→        selectedSize: ci.selectedSize?.name || null,
+   648→        selectedOptions: [
+   649→          ...ci.selectedExtras.map(e => e.name),
+   650→          ...ci.selectedRemoves.map(r => r.name),
+   651→        ],
+   652→        kitchenNote: ci.kitchenNote || null,
+   653→      }))
+   654→
+   655→      const res = await fetch('/api/orders', {
+   656→        method: 'POST',
+   657→        headers: { 'Content-Type': 'application/json' },
+   658→        body: JSON.stringify({
+   659→          customerName,
+   660→          customerPhone,
+   661→          customerEmail: customerEmail || undefined,
+   662→          orderType,
+   663→          paymentMethod: orderType === 'PICKUP' && paymentMethod === 'CARD_ON_DELIVERY' ? 'CARD_ON_PICKUP' : paymentMethod,
+   664→          deliveryZoneId: orderType === 'DELIVERY' ? deliveryZoneId : undefined,
+   665→          deliveryAddressLine1: orderType === 'DELIVERY' ? deliveryAddress : undefined,
+   666→          deliveryCity: orderType === 'DELIVERY' ? deliveryCity : undefined,
+   667→          deliveryNote: orderType === 'DELIVERY' ? deliveryNote : undefined,
+   668→          kitchenNote: kitchenNote || undefined,
+   669→          items,
+   670→          subtotalAmount: subtotal,
+   671→          deliveryFee,
+   672→          totalAmount: total,
+   673→        }),
+   674→      })
+   675→      if (!res.ok) {
+   676→        const err = await res.json()
+   677→        throw new Error(err.error || 'Chyba pri vytváraní objednávky')
+   678→      }
+   679→      return res.json()
+   680→    },
+   681→    onSuccess: (order) => {
+   682→      toast.success('Objednávka bola vytvorená!')
+   683→      cartStore.clearCart()
+   684→      queryClient.invalidateQueries({ queryKey: ['orders'] })
+   685→      onOrderCreated(order.id)
+   686→    },
+   687→    onError: (error) => {
+   688→      toast.error(error.message || 'Chyba pri vytváraní objednávky')
+   689→    },
+   690→  })
+   691→
+   692→  const canSubmit = customerName.trim() && customerPhone.trim() && cartStore.items.length > 0
+   693→    && (orderType === 'PICKUP' || (deliveryZoneId && deliveryAddress.trim()))
+   694→
+   695→  return (
+   696→    <Sheet open={open} onOpenChange={onOpenChange}>
+   697→      <SheetContent className="w-full sm:max-w-lg flex flex-col">
+   698→        <SheetHeader>
+   699→          <SheetTitle className="flex items-center gap-2">
+   700→            <CreditCard className="h-5 w-5" style={{ color: '#4f7f2a' }} />
+   701→            Dokončenie objednávky
+   702→          </SheetTitle>
+   703→          <SheetDescription>Vyplňte údaje a odošlite objednávku</SheetDescription>
+   704→        </SheetHeader>
+   705→
+   706→        <div className="flex-1 overflow-y-auto py-4 space-y-5 custom-scrollbar">
+   707→          {/* Customer info */}
+   708→          <div className="space-y-3">
+   709→            <h3 className="font-semibold text-sm flex items-center gap-2">
+   710→              <User className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   711→              Kontaktné údaje
+   712→            </h3>
+   713→            <div className="space-y-2">
+   714→              <div>
+   715→                <Label htmlFor="name">Meno a priezvisko *</Label>
+   716→                <Input
+   717→                  id="name"
+   718→                  placeholder="Ján Novák"
+   719→                  value={customerName}
+   720→                  onChange={(e) => setCustomerName(e.target.value)}
+   721→                />
+   722→              </div>
+   723→              <div>
+   724→                <Label htmlFor="phone">Telefón *</Label>
+   725→                <Input
+   726→                  id="phone"
+   727→                  placeholder="+421 900 123 456"
+   728→                  value={customerPhone}
+   729→                  onChange={(e) => setCustomerPhone(e.target.value)}
+   730→                />
+   731→              </div>
+   732→              <div>
+   733→                <Label htmlFor="email">E-mail</Label>
+   734→                <Input
+   735→                  id="email"
+   736→                  type="email"
+   737→                  placeholder="jan@email.sk"
+   738→                  value={customerEmail}
+   739→                  onChange={(e) => setCustomerEmail(e.target.value)}
+   740→                />
+   741→              </div>
+   742→            </div>
+   743→          </div>
+   744→
+   745→          <Separator />
+   746→
+   747→          {/* Order type */}
+   748→          <div className="space-y-3">
+   749→            <h3 className="font-semibold text-sm flex items-center gap-2">
+   750→              <Truck className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   751→              Spôsob prevzatia
+   752→            </h3>
+   753→            <div className="grid grid-cols-2 gap-2">
+   754→              <Button
+   755→                variant={orderType === 'DELIVERY' ? 'default' : 'outline'}
+   756→                className={orderType === 'DELIVERY' ? 'text-white' : ''}
+   757→                style={orderType === 'DELIVERY' ? { backgroundColor: '#4f7f2a' } : {}}
+   758→                onClick={() => setOrderType('DELIVERY')}
+   759→              >
+   760→                <Truck className="h-4 w-4 mr-2" />
+   761→                Rozvoz
+   762→              </Button>
+   763→              <Button
+   764→                variant={orderType === 'PICKUP' ? 'default' : 'outline'}
+   765→                className={orderType === 'PICKUP' ? 'text-white' : ''}
+   766→                style={orderType === 'PICKUP' ? { backgroundColor: '#4f7f2a' } : {}}
+   767→                onClick={() => setOrderType('PICKUP')}
+   768→              >
+   769→                <Package className="h-4 w-4 mr-2" />
+   770→                Osobný odber
+   771→              </Button>
+   772→            </div>
+   773→          </div>
+   774→
+   775→          {/* Delivery address */}
+   776→          {orderType === 'DELIVERY' && (
+   777→            <div className="space-y-3">
+   778→              <h3 className="font-semibold text-sm flex items-center gap-2">
+   779→                <MapPin className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   780→                Adresa doručenia
+   781→              </h3>
+   782→              <div className="space-y-2">
+   783→                <div>
+   784→                  <Label>Zóna doručenia *</Label>
+   785→                  <Select value={deliveryZoneId} onValueChange={setDeliveryZoneId}>
+   786→                    <SelectTrigger>
+   787→                      <SelectValue placeholder="Vyberte zónu" />
+   788→                    </SelectTrigger>
+   789→                    <SelectContent>
+   790→                      {zones?.filter(z => z.isActive).map((zone) => (
+   791→                        <SelectItem key={zone.id} value={zone.id}>
+   792→                          {zone.name} ({formatPrice(zone.deliveryFee)} - {zone.estimatedDeliveryMinutes} min)
+   793→                        </SelectItem>
+   794→                      ))}
+   795→                    </SelectContent>
+   796→                  </Select>
+   797→                </div>
+   798→                {selectedZone && (
+   799→                  <div className="rounded-lg p-3 text-sm space-y-1" style={{ backgroundColor: '#fff4df' }}>
+   800→                    <div className="flex justify-between">
+   801→                      <span>Dopravné:</span>
+   802→                      <span className="font-medium">{formatPrice(selectedZone.deliveryFee)}</span>
+   803→                    </div>
+   804→                    <div className="flex justify-between">
+   805→                      <span>Min. objednávka:</span>
+   806→                      <span className="font-medium">{formatPrice(selectedZone.minimumOrderAmount)}</span>
+   807→                    </div>
+   808→                    <div className="flex justify-between">
+   809→                      <span>Očakávaný čas:</span>
+   810→                      <span className="font-medium">~{selectedZone.estimatedDeliveryMinutes} min</span>
+   811→                    </div>
+   812→                  </div>
+   813→                )}
+   814→                <div>
+   815→                  <Label htmlFor="address">Ulica a číslo *</Label>
+   816→                  <Input
+   817→                    id="address"
+   818→                    placeholder="Hlavná 12"
+   819→                    value={deliveryAddress}
+   820→                    onChange={(e) => setDeliveryAddress(e.target.value)}
+   821→                  />
+   822→                </div>
+   823→                <div>
+   824→                  <Label htmlFor="city">Mesto</Label>
+   825→                  <Input
+   826→                    id="city"
+   827→                    placeholder="Hlohovec"
+   828→                    value={deliveryCity}
+   829→                    onChange={(e) => setDeliveryCity(e.target.value)}
+   830→                  />
+   831→                </div>
+   832→                <div>
+   833→                  <Label htmlFor="deliveryNote">Poznámka pre kuriéra</Label>
+   834→                  <Input
+   835→                    id="deliveryNote"
+   836→                    placeholder="Zvoňte, 3. poschodie..."
+   837→                    value={deliveryNote}
+   838→                    onChange={(e) => setDeliveryNote(e.target.value)}
+   839→                  />
+   840→                </div>
+   841→              </div>
+   842→            </div>
+   843→          )}
+   844→
+   845→          <Separator />
+   846→
+   847→          {/* Payment */}
+   848→          <div className="space-y-3">
+   849→            <h3 className="font-semibold text-sm flex items-center gap-2">
+   850→              <CreditCard className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   851→              Platba
+   852→            </h3>
+   853→            <div className="space-y-2">
+   854→              <Button
+   855→                variant={paymentMethod === 'CASH' ? 'default' : 'outline'}
+   856→                className={`w-full justify-start ${paymentMethod === 'CASH' ? 'text-white' : ''}`}
+   857→                style={paymentMethod === 'CASH' ? { backgroundColor: '#4f7f2a' } : {}}
+   858→                onClick={() => setPaymentMethod('CASH')}
+   859→              >
+   860→                💵 Hotovosť
+   861→              </Button>
+   862→              {orderType === 'DELIVERY' && (
+   863→                <Button
+   864→                  variant={paymentMethod === 'CARD_ON_DELIVERY' ? 'default' : 'outline'}
+   865→                  className={`w-full justify-start ${paymentMethod === 'CARD_ON_DELIVERY' ? 'text-white' : ''}`}
+   866→                  style={paymentMethod === 'CARD_ON_DELIVERY' ? { backgroundColor: '#4f7f2a' } : {}}
+   867→                  onClick={() => setPaymentMethod('CARD_ON_DELIVERY')}
+   868→                >
+   869→                  💳 Kartou pri doručení
+   870→                </Button>
+   871→              )}
+   872→              {orderType === 'PICKUP' && (
+   873→                <Button
+   874→                  variant={paymentMethod === 'CARD_ON_PICKUP' ? 'default' : 'outline'}
+   875→                  className={`w-full justify-start ${paymentMethod === 'CARD_ON_PICKUP' ? 'text-white' : ''}`}
+   876→                  style={paymentMethod === 'CARD_ON_PICKUP' ? { backgroundColor: '#4f7f2a' } : {}}
+   877→                  onClick={() => setPaymentMethod('CARD_ON_PICKUP')}
+   878→                >
+   879→                  💳 Kartou pri odbere
+   880→                </Button>
+   881→              )}
+   882→            </div>
+   883→          </div>
+   884→
+   885→          <Separator />
+   886→
+   887→          {/* Kitchen note */}
+   888→          <div>
+   889→            <Label className="text-sm font-semibold flex items-center gap-2 mb-2">
+   890→              <MessageSquare className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   891→              Poznámka k objednávke
+   892→            </Label>
+   893→            <Textarea
+   894→              placeholder="Špeciálne požiadavky..."
+   895→              value={kitchenNote}
+   896→              onChange={(e) => setKitchenNote(e.target.value)}
+   897→              rows={2}
+   898→            />
+   899→          </div>
+   900→
+   901→          <Separator />
+   902→
+   903→          {/* Summary */}
+   904→          <div className="space-y-2">
+   905→            <h3 className="font-semibold text-sm">Zhrnutie objednávky</h3>
+   906→            {cartStore.items.map((ci, i) => (
+   907→              <div key={i} className="flex justify-between text-sm">
+   908→                <span className="text-muted-foreground">
+   909→                  {ci.quantity}x {ci.menuItem.name}
+   910→                  {ci.selectedSize ? ` (${ci.selectedSize.name})` : ''}
+   911→                </span>
+   912→                <span>{formatPrice(ci.lineTotal)}</span>
+   913→              </div>
+   914→            ))}
+   915→            <Separator />
+   916→            <div className="flex justify-between text-sm">
+   917→              <span className="text-muted-foreground">Medzisúčet</span>
+   918→              <span>{formatPrice(subtotal)}</span>
+   919→            </div>
+   920→            {orderType === 'DELIVERY' && (
+   921→              <div className="flex justify-between text-sm">
+   922→                <span className="text-muted-foreground">Dopravné</span>
+   923→                <span>{formatPrice(deliveryFee)}</span>
+   924→              </div>
+   925→            )}
+   926→            <div className="flex justify-between font-bold text-lg">
+   927→              <span>Celkom</span>
+   928→              <span style={{ color: '#4f7f2a' }}>{formatPrice(total)}</span>
+   929→            </div>
+   930→          </div>
+   931→        </div>
+   932→
+   933→        <div className="border-t pt-4">
+   934→          <Button
+   935→            className="w-full text-base py-6"
+   936→            disabled={!canSubmit || createOrderMutation.isPending}
+   937→            style={{ backgroundColor: canSubmit ? '#4f7f2a' : undefined, color: canSubmit ? 'white' : undefined }}
+   938→            onMouseEnter={(e) => canSubmit && (e.currentTarget.style.backgroundColor = '#3d6620')}
+   939→            onMouseLeave={(e) => canSubmit && (e.currentTarget.style.backgroundColor = '#4f7f2a')}
+   940→            onClick={() => createOrderMutation.mutate()}
+   941→          >
+   942→            {createOrderMutation.isPending ? 'Odosielam...' : 'Odoslať objednávku'}
+   943→          </Button>
+   944→        </div>
+   945→      </SheetContent>
+   946→    </Sheet>
+   947→  )
+   948→}
+   949→
+   950→// ─── Order Tracking ───
+   951→function OrderTracking({ orderId, onBack }: { orderId: string; onBack: () => void }) {
+   952→  const { data: order, isLoading } = useQuery<Order>({
+   953→    queryKey: ['order', orderId],
+   954→    queryFn: () => fetch(`/api/orders/${orderId}`).then(r => r.json()),
+   955→    refetchInterval: 5000,
+   956→  })
+   957→
+   958→  const statusSteps: OrderStatus[] = [
+   959→    'NEW', 'ACCEPTED', 'IN_KITCHEN', 'PREPARING', 'READY',
+   960→    ...(order?.orderType === 'DELIVERY' ? ['WAITING_FOR_COURIER', 'ASSIGNED_TO_COURIER', 'PICKED_UP', 'ON_THE_WAY'] : []),
+   961→    'DELIVERED',
+   962→  ]
+   963→
+   964→  const currentStepIndex = order ? statusSteps.indexOf(order.status) : -1
+   965→
+   966→  return (
+   967→    <div className="flex flex-col h-full">
+   968→      <div className="flex items-center gap-3 p-4 border-b">
+   969→        <Button variant="ghost" size="icon" onClick={onBack}>
+   970→          <ArrowLeft className="h-5 w-5" />
+   971→        </Button>
+   972→        <div>
+   973→          <h2 className="text-lg font-bold" style={{ color: '#4f7f2a' }}>
+   974→            Objednávka {order?.orderNumber || '...'}
+   975→          </h2>
+   976→          <p className="text-sm text-muted-foreground">Sledovanie stavu</p>
+   977→        </div>
+   978→      </div>
+   979→
+   980→      <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+   981→        {isLoading ? (
+   982→          <div className="space-y-4">
+   983→            <Skeleton className="h-32 rounded-xl" />
+   984→            <Skeleton className="h-48 rounded-xl" />
+   985→          </div>
+   986→        ) : order ? (
+   987→          <>
+   988→            {/* Status badge */}
+   989→            <div className="text-center">
+   990→              <Badge className={`text-base px-4 py-2 ${getStatusColor(order.status)}`}>
+   991→                {ORDER_STATUS_LABELS[order.status]}
+   992→              </Badge>
+   993→            </div>
+   994→
+   995→            {/* Status stepper */}
+   996→            <div className="space-y-2">
+   997→              {statusSteps.map((step, i) => {
+   998→                const isCompleted = i <= currentStepIndex
+   999→                const isCurrent = i === currentStepIndex
+  1000→                const isCancelled = order.status === 'CANCELLED' || order.status === 'REFUNDED'
+  1001→
+  1002→                return (
+  1003→                  <div
+  1004→                    key={step}
+  1005→                    className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
+  1006→                      isCurrent ? 'ring-2' : ''
+  1007→                    }`}
+  1008→                    style={{
+  1009→                      backgroundColor: isCompleted ? (isCancelled && isCurrent ? '#fef2f0' : '#f0f7ec') : '#f9f9f9',
+  1010→                      ringColor: isCurrent ? '#4f7f2a' : undefined,
+  1011→                    }}
+  1012→                  >
+  1013→                    <div
+  1014→                      className="h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0"
+  1015→                      style={{
+  1016→                        backgroundColor: isCompleted ? (isCancelled && isCurrent ? '#c73325' : '#4f7f2a') : '#e5e5e5',
+  1017→                        color: isCompleted ? 'white' : '#999',
+  1018→                      }}
+  1019→                    >
+  1020→                      {isCompleted ? <Check className="h-4 w-4" /> : <span className="text-xs">{i + 1}</span>}
+  1021→                    </div>
+  1022→                    <span className={`text-sm font-medium ${isCompleted ? '' : 'text-muted-foreground'}`}>
+  1023→                      {ORDER_STATUS_LABELS[step]}
+  1024→                    </span>
+  1025→                  </div>
+  1026→                )
+  1027→              })}
+  1028→            </div>
+  1029→
+  1030→            {/* Order details */}
+  1031→            <Card className="p-4">
+  1032→              <h3 className="font-semibold mb-3">Detail objednávky</h3>
+  1033→              <div className="space-y-2 text-sm">
+  1034→                <div className="flex justify-between">
+  1035→                  <span className="text-muted-foreground">Číslo:</span>
+  1036→                  <span className="font-medium">{order.orderNumber}</span>
+  1037→                </div>
+  1038→                <div className="flex justify-between">
+  1039→                  <span className="text-muted-foreground">Typ:</span>
+  1040→                  <span>{order.orderType === 'DELIVERY' ? 'Rozvoz' : 'Osobný odber'}</span>
+  1041→                </div>
+  1042→                <div className="flex justify-between">
+  1043→                  <span className="text-muted-foreground">Platba:</span>
+  1044→                  <span>
+  1045→                    {order.paymentMethod === 'CASH' ? 'Hotovosť'
+  1046→                      : order.paymentMethod === 'CARD_ON_DELIVERY' ? 'Karta pri doručení'
+  1047→                      : 'Karta pri odbere'}
+  1048→                  </span>
+  1049→                </div>
+  1050→                <Separator />
+  1051→                {order.items.map((item) => (
+  1052→                  <div key={item.id} className="flex justify-between">
+  1053→                    <span className="text-muted-foreground">
+  1054→                      {item.quantity}x {item.menuItemNameSnapshot}
+  1055→                    </span>
+  1056→                    <span>{formatPrice(item.lineTotal)}</span>
+  1057→                  </div>
+  1058→                ))}
+  1059→                <Separator />
+  1060→                <div className="flex justify-between font-bold">
+  1061→                  <span>Celkom</span>
+  1062→                  <span style={{ color: '#4f7f2a' }}>{formatPrice(order.totalAmount)}</span>
+  1063→                </div>
+  1064→              </div>
+  1065→            </Card>
+  1066→          </>
+  1067→        ) : (
+  1068→          <div className="text-center py-12 text-muted-foreground">
+  1069→            <p>Objednávka nenájdená</p>
+  1070→          </div>
+  1071→        )}
+  1072→      </div>
+  1073→    </div>
+  1074→  )
+  1075→}
+  1076→
