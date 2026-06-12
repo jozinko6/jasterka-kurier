@@ -1,0 +1,26 @@
+{
+  "name": "Kuriér — Pizza Jašterka",
+  "short_name": "Kuriér",
+  "description": "Kuriérsky panel pre doručovateľov Pizza Jašterka",
+  "start_url": "/kurier",
+  "scope": "/kurier",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#f0fdf4",
+  "background_color": "#f0fdf4",
+  "categories": ["food", "business"],
+  "icons": [
+    {
+      "src": "/icon-kurier-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-kurier-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

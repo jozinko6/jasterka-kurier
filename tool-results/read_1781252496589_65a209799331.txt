@@ -1,0 +1,788 @@
+     1→'use client'
+     2→
+     3→import { useState } from 'react'
+     4→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+     5→import { toast } from 'sonner'
+     6→import type { Order, OrderStatus, Courier, DeliveryZone, RestaurantSettings, MenuCategory } from '@/lib/types'
+     7→import { formatPrice, getStatusColor, ORDER_STATUS_LABELS, COURIER_STATUS_LABELS, VEHICLE_TYPE_LABELS } from '@/lib/types'
+     8→import { Button } from '@/components/ui/button'
+     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    10→import { Badge } from '@/components/ui/badge'
+    11→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    12→import { Input } from '@/components/ui/input'
+    13→import { Textarea } from '@/components/ui/textarea'
+    14→import { Label } from '@/components/ui/label'
+    15→import { Switch } from '@/components/ui/switch'
+    16→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    17→import { Separator } from '@/components/ui/separator'
+    18→import { ScrollArea } from '@/components/ui/scroll-area'
+    19→import { Skeleton } from '@/components/ui/skeleton'
+    20→import {
+    21→  Table,
+    22→  TableBody,
+    23→  TableCell,
+    24→  TableHead,
+    25→  TableHeader,
+    26→  TableRow,
+    27→} from '@/components/ui/table'
+    28→import {
+    29→  Dialog,
+    30→  DialogContent,
+    31→  DialogDescription,
+    32→  DialogHeader,
+    33→  DialogTitle,
+    34→} from '@/components/ui/dialog'
+    35→import {
+    36→  ClipboardList,
+    37→  Settings,
+    38→  Users,
+    39→  BarChart3,
+    40→  UtensilsCrossed,
+    41→  Eye,
+    42→  UserCheck,
+    43→  TrendingUp,
+    44→  DollarSign,
+    45→  ShoppingBag,
+    46→  RefreshCw,
+    47→  Truck,
+    48→  Phone,
+    49→  Mail,
+    50→  MapPin,
+    51→  MessageSquare,
+    52→  User,
+    53→  Clock,
+    54→} from 'lucide-react'
+    55→
+    56→export function AdminSection() {
+    57→  return (
+    58→    <div className="flex flex-col h-full">
+    59→      <div className="p-4 border-b">
+    60→        <h2 className="text-xl font-bold" style={{ color: '#4f7f2a' }}>Administrácia</h2>
+    61→        <p className="text-sm text-muted-foreground">Správa objednávok, menu a nastavení</p>
+    62→      </div>
+    63→
+    64→      <Tabs defaultValue="orders" className="flex-1 flex flex-col">
+    65→        <div className="px-4 pt-2">
+    66→          <TabsList className="w-full flex-wrap h-auto gap-1 bg-transparent p-0">
+    67→            <TabsTrigger value="orders" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+    68→              <ClipboardList className="h-4 w-4 mr-1" />
+    69→              Objednávky
+    70→            </TabsTrigger>
+    71→            <TabsTrigger value="menu" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+    72→              <UtensilsCrossed className="h-4 w-4 mr-1" />
+    73→              Menu
+    74→            </TabsTrigger>
+    75→            <TabsTrigger value="settings" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+    76→              <Settings className="h-4 w-4 mr-1" />
+    77→              Nastavenia
+    78→            </TabsTrigger>
+    79→            <TabsTrigger value="couriers" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+    80→              <Users className="h-4 w-4 mr-1" />
+    81→              Kuriéri
+    82→            </TabsTrigger>
+    83→            <TabsTrigger value="stats" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+    84→              <BarChart3 className="h-4 w-4 mr-1" />
+    85→              Štatistiky
+    86→            </TabsTrigger>
+    87→          </TabsList>
+    88→        </div>
+    89→
+    90→        <div className="flex-1 overflow-y-auto custom-scrollbar">
+    91→          <TabsContent value="orders" className="m-0 p-4">
+    92→            <AdminOrders />
+    93→          </TabsContent>
+    94→          <TabsContent value="menu" className="m-0 p-4">
+    95→            <AdminMenu />
+    96→          </TabsContent>
+    97→          <TabsContent value="settings" className="m-0 p-4">
+    98→            <AdminSettings />
+    99→          </TabsContent>
+   100→          <TabsContent value="couriers" className="m-0 p-4">
+   101→            <AdminCouriers />
+   102→          </TabsContent>
+   103→          <TabsContent value="stats" className="m-0 p-4">
+   104→            <AdminStats />
+   105→          </TabsContent>
+   106→        </div>
+   107→      </Tabs>
+   108→    </div>
+   109→  )
+   110→}
+   111→
+   112→// ─── Admin Orders ───
+   113→function AdminOrders() {
+   114→  const queryClient = useQueryClient()
+   115→  const [statusFilter, setStatusFilter] = useState<string>('ALL')
+   116→  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+   117→  const [detailOpen, setDetailOpen] = useState(false)
+   118→
+   119→  const { data: orders, isLoading } = useQuery<Order[]>({
+   120→    queryKey: ['admin-orders', statusFilter],
+   121→    queryFn: () => {
+   122→      const params = statusFilter !== 'ALL' ? `?status=${statusFilter}` : ''
+   123→      return fetch(`/api/orders${params}`).then(r => r.json())
+   124→    },
+   125→  })
+   126→
+   127→  const { data: couriers } = useQuery<Courier[]>({
+   128→    queryKey: ['couriers'],
+   129→    queryFn: () => fetch('/api/couriers').then(r => r.json()),
+   130→  })
+   131→
+   132→  const updateStatusMutation = useMutation({
+   133→    mutationFn: async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
+   134→      const res = await fetch(`/api/orders/${orderId}`, {
+   135→        method: 'PATCH',
+   136→        headers: { 'Content-Type': 'application/json' },
+   137→        body: JSON.stringify({ status }),
+   138→      })
+   139→      if (!res.ok) throw new Error('Chyba pri aktualizácii')
+   140→      return res.json()
+   141→    },
+   142→    onSuccess: () => {
+   143→      queryClient.invalidateQueries({ queryKey: ['admin-orders'] })
+   144→      queryClient.invalidateQueries({ queryKey: ['orders'] })
+   145→      toast.success('Stav objednávky aktualizovaný')
+   146→    },
+   147→    onError: () => toast.error('Chyba pri aktualizácii stavu'),
+   148→  })
+   149→
+   150→  const assignCourierMutation = useMutation({
+   151→    mutationFn: async ({ orderId, courierId }: { orderId: string; courierId: string }) => {
+   152→      const res = await fetch('/api/dispatch', {
+   153→        method: 'POST',
+   154→        headers: { 'Content-Type': 'application/json' },
+   155→        body: JSON.stringify({ orderId, courierId }),
+   156→      })
+   157→      if (!res.ok) throw new Error('Chyba pri priraďovaní')
+   158→      return res.json()
+   159→    },
+   160→    onSuccess: () => {
+   161→      queryClient.invalidateQueries({ queryKey: ['admin-orders'] })
+   162→      toast.success('Kuriér priradený')
+   163→    },
+   164→    onError: () => toast.error('Chyba pri priraďovaní kuriéra'),
+   165→  })
+   166→
+   167→  const handleViewDetail = (order: Order) => {
+   168→    setSelectedOrder(order)
+   169→    setDetailOpen(true)
+   170→  }
+   171→
+   172→  if (isLoading) {
+   173→    return (
+   174→      <div className="space-y-3">
+   175→        {[1, 2, 3, 4, 5].map(i => (
+   176→          <Skeleton key={i} className="h-16 rounded-lg" />
+   177→        ))}
+   178→      </div>
+   179→    )
+   180→  }
+   181→
+   182→  return (
+   183→    <div className="space-y-4">
+   184→      {/* Filters */}
+   185→      <div className="flex items-center gap-3 flex-wrap">
+   186→        <Label className="text-sm font-medium">Filter stavu:</Label>
+   187→        <Select value={statusFilter} onValueChange={setStatusFilter}>
+   188→          <SelectTrigger className="w-48">
+   189→            <SelectValue />
+   190→          </SelectTrigger>
+   191→          <SelectContent>
+   192→            <SelectItem value="ALL">Všetky</SelectItem>
+   193→            {Object.entries(ORDER_STATUS_LABELS).map(([key, label]) => (
+   194→              <SelectItem key={key} value={key}>{label}</SelectItem>
+   195→            ))}
+   196→          </SelectContent>
+   197→        </Select>
+   198→        <span className="text-sm text-muted-foreground">
+   199→          {orders?.length || 0} objednávok
+   200→        </span>
+   201→      </div>
+   202→
+   203→      {/* Orders table */}
+   204→      <div className="rounded-lg border overflow-hidden">
+   205→        <div className="overflow-x-auto max-h-[calc(100vh-280px)] custom-scrollbar">
+   206→          <Table>
+   207→            <TableHeader>
+   208→              <TableRow>
+   209→                <TableHead>Číslo</TableHead>
+   210→                <TableHead>Zákazník</TableHead>
+   211→                <TableHead>Typ</TableHead>
+   212→                <TableHead>Stav</TableHead>
+   213→                <TableHead>Suma</TableHead>
+   214→                <TableHead>Čas</TableHead>
+   215→                <TableHead>Akcie</TableHead>
+   216→              </TableRow>
+   217→            </TableHeader>
+   218→            <TableBody>
+   219→              {orders?.map((order) => (
+   220→                <TableRow key={order.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleViewDetail(order)}>
+   221→                  <TableCell className="font-medium" style={{ color: '#4f7f2a' }}>{order.orderNumber}</TableCell>
+   222→                  <TableCell>{order.customerName}</TableCell>
+   223→                  <TableCell>
+   224→                    <Badge variant="outline" className="text-xs">
+   225→                      {order.orderType === 'DELIVERY' ? '🚗 Rozvoz' : '📦 Odber'}
+   226→                    </Badge>
+   227→                  </TableCell>
+   228→                  <TableCell>
+   229→                    <Badge className={`text-xs ${getStatusColor(order.status)}`}>
+   230→                      {ORDER_STATUS_LABELS[order.status]}
+   231→                    </Badge>
+   232→                  </TableCell>
+   233→                  <TableCell className="font-medium">{formatPrice(order.totalAmount)}</TableCell>
+   234→                  <TableCell className="text-sm text-muted-foreground">
+   235→                    {new Date(order.createdAt).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })}
+   236→                  </TableCell>
+   237→                  <TableCell>
+   238→                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleViewDetail(order) }}>
+   239→                      <Eye className="h-4 w-4" />
+   240→                    </Button>
+   241→                  </TableCell>
+   242→                </TableRow>
+   243→              ))}
+   244→              {(!orders || orders.length === 0) && (
+   245→                <TableRow>
+   246→                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+   247→                    Žiadne objednávky
+   248→                  </TableCell>
+   249→                </TableRow>
+   250→              )}
+   251→            </TableBody>
+   252→          </Table>
+   253→        </div>
+   254→      </div>
+   255→
+   256→      {/* Order detail dialog */}
+   257→      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+   258→        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+   259→          <DialogHeader>
+   260→            <DialogTitle style={{ color: '#4f7f2a' }}>
+   261→              Objednávka {selectedOrder?.orderNumber}
+   262→            </DialogTitle>
+   263→            <DialogDescription>Detail objednávky a akcie</DialogDescription>
+   264→          </DialogHeader>
+   265→          {selectedOrder && (
+   266→            <div className="space-y-4">
+   267→              <div className="flex items-center gap-2">
+   268→                <Badge className={getStatusColor(selectedOrder.status)}>
+   269→                  {ORDER_STATUS_LABELS[selectedOrder.status]}
+   270→                </Badge>
+   271→                <Badge variant="outline">
+   272→                  {selectedOrder.orderType === 'DELIVERY' ? 'Rozvoz' : 'Osobný odber'}
+   273→                </Badge>
+   274→              </div>
+   275→
+   276→              <div className="space-y-2 text-sm">
+   277→                <div className="flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground" />{selectedOrder.customerName}</div>
+   278→                <div className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" />{selectedOrder.customerPhone}</div>
+   279→                {selectedOrder.customerEmail && <div className="flex items-center gap-2"><Mail className="h-4 w-4 text-muted-foreground" />{selectedOrder.customerEmail}</div>}
+   280→                {selectedOrder.deliveryAddressLine1 && <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" />{selectedOrder.deliveryAddressLine1}{selectedOrder.deliveryCity ? `, ${selectedOrder.deliveryCity}` : ''}</div>}
+   281→                {selectedOrder.kitchenNote && <div className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-red-500" />{selectedOrder.kitchenNote}</div>}
+   282→              </div>
+   283→
+   284→              <Separator />
+   285→
+   286→              <div className="space-y-2">
+   287→                <h4 className="font-semibold text-sm">Položky</h4>
+   288→                {selectedOrder.items.map((item) => (
+   289→                  <div key={item.id} className="flex justify-between text-sm">
+   290→                    <span>{item.quantity}x {item.menuItemNameSnapshot}</span>
+   291→                    <span>{formatPrice(item.lineTotal)}</span>
+   292→                  </div>
+   293→                ))}
+   294→                <Separator />
+   295→                <div className="flex justify-between text-sm text-muted-foreground">
+   296→                  <span>Medzisúčet</span>
+   297→                  <span>{formatPrice(selectedOrder.subtotalAmount)}</span>
+   298→                </div>
+   299→                {selectedOrder.deliveryFee > 0 && (
+   300→                  <div className="flex justify-between text-sm text-muted-foreground">
+   301→                    <span>Dopravné</span>
+   302→                    <span>{formatPrice(selectedOrder.deliveryFee)}</span>
+   303→                  </div>
+   304→                )}
+   305→                <div className="flex justify-between font-bold">
+   306→                  <span>Celkom</span>
+   307→                  <span style={{ color: '#4f7f2a' }}>{formatPrice(selectedOrder.totalAmount)}</span>
+   308→                </div>
+   309→              </div>
+   310→
+   311→              <Separator />
+   312→
+   313→              {/* Status update */}
+   314→              <div>
+   315→                <Label className="text-sm font-semibold">Zmeniť stav</Label>
+   316→                <div className="flex flex-wrap gap-2 mt-2">
+   317→                  {(['ACCEPTED', 'IN_KITCHEN', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED'] as OrderStatus[]).map((s) => (
+   318→                    <Button
+   319→                      key={s}
+   320→                      variant={selectedOrder.status === s ? 'default' : 'outline'}
+   321→                      size="sm"
+   322→                      disabled={updateStatusMutation.isPending}
+   323→                      onClick={() => updateStatusMutation.mutate({ orderId: selectedOrder.id, status: s })}
+   324→                    >
+   325→                      {ORDER_STATUS_LABELS[s]}
+   326→                    </Button>
+   327→                  ))}
+   328→                </div>
+   329→              </div>
+   330→
+   331→              {/* Assign courier for delivery orders */}
+   332→              {selectedOrder.orderType === 'DELIVERY' && (
+   333→                <div>
+   334→                  <Label className="text-sm font-semibold flex items-center gap-1">
+   335→                    <Truck className="h-4 w-4" />
+   336→                    Priradiť kuriéra
+   337→                  </Label>
+   338→                  <div className="flex flex-wrap gap-2 mt-2">
+   339→                    {couriers?.filter(c => c.isActive && c.status !== 'OFFLINE').map((c) => (
+   340→                      <Button
+   341→                        key={c.id}
+   342→                        variant="outline"
+   343→                        size="sm"
+   344→                        disabled={assignCourierMutation.isPending}
+   345→                        onClick={() => assignCourierMutation.mutate({ orderId: selectedOrder.id, courierId: c.id })}
+   346→                      >
+   347→                        <UserCheck className="h-3 w-3 mr-1" />
+   348→                        {c.displayName}
+   349→                      </Button>
+   350→                    ))}
+   351→                    {couriers?.filter(c => c.isActive && c.status !== 'OFFLINE').length === 0 && (
+   352→                      <p className="text-sm text-muted-foreground">Žiadni dostupní kuriéri</p>
+   353→                    )}
+   354→                  </div>
+   355→                </div>
+   356→              )}
+   357→            </div>
+   358→          )}
+   359→        </DialogContent>
+   360→      </Dialog>
+   361→    </div>
+   362→  )
+   363→}
+   364→
+   365→// ─── Admin Menu ───
+   366→function AdminMenu() {
+   367→  const queryClient = useQueryClient()
+   368→
+   369→  const { data: categories, isLoading } = useQuery<MenuCategory[]>({
+   370→    queryKey: ['admin-categories'],
+   371→    queryFn: () => fetch('/api/admin/categories').then(r => r.json()),
+   372→  })
+   373→
+   374→  const updateMenuItemMutation = useMutation({
+   375→    mutationFn: async ({ id, ...fields }: { id: string; isActive?: boolean; isAvailable?: boolean }) => {
+   376→      const res = await fetch('/api/admin/menu', {
+   377→        method: 'PUT',
+   378→        headers: { 'Content-Type': 'application/json' },
+   379→        body: JSON.stringify({ id, ...fields }),
+   380→      })
+   381→      if (!res.ok) throw new Error('Chyba pri aktualizácii')
+   382→      return res.json()
+   383→    },
+   384→    onSuccess: () => {
+   385→      queryClient.invalidateQueries({ queryKey: ['admin-categories'] })
+   386→      queryClient.invalidateQueries({ queryKey: ['menu'] })
+   387→      toast.success('Položka aktualizovaná')
+   388→    },
+   389→    onError: () => toast.error('Chyba pri aktualizácii'),
+   390→  })
+   391→
+   392→  if (isLoading) {
+   393→    return (
+   394→      <div className="space-y-3">
+   395→        {[1, 2, 3].map(i => (
+   396→          <Skeleton key={i} className="h-48 rounded-xl" />
+   397→        ))}
+   398→      </div>
+   399→    )
+   400→  }
+   401→
+   402→  return (
+   403→    <div className="space-y-4">
+   404→      {categories?.map((cat) => (
+   405→        <Card key={cat.id}>
+   406→          <CardHeader className="pb-3">
+   407→            <CardTitle className="text-base flex items-center justify-between">
+   408→              <span>
+   409→                {cat.name}
+   410→                <span className="text-sm font-normal text-muted-foreground ml-2">
+   411→                  ({cat.menuItems.length} položiek)
+   412→                </span>
+   413→              </span>
+   414→              <Badge variant={cat.isActive ? 'default' : 'secondary'} className={cat.isActive ? 'bg-green-100 text-green-800' : ''}>
+   415→                {cat.isActive ? 'Aktívna' : 'Neaktívna'}
+   416→              </Badge>
+   417→            </CardTitle>
+   418→          </CardHeader>
+   419→          <CardContent>
+   420→            <div className="space-y-2">
+   421→              {cat.menuItems.map((item) => (
+   422→                <div
+   423→                  key={item.id}
+   424→                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+   425→                >
+   426→                  <div className="flex-1 min-w-0">
+   427→                    <div className="flex items-center gap-2">
+   428→                      <span className="font-medium text-sm">{item.name}</span>
+   429→                      {item.isFeatured && (
+   430→                        <Badge className="text-xs" style={{ backgroundColor: '#c73325', color: 'white' }}>Akcia</Badge>
+   431→                      )}
+   432→                    </div>
+   433→                    <p className="text-xs text-muted-foreground">{formatPrice(item.basePrice)}</p>
+   434→                  </div>
+   435→                  <div className="flex items-center gap-3">
+   436→                    <div className="flex items-center gap-2">
+   437→                      <Label className="text-xs text-muted-foreground">Viditeľné</Label>
+   438→                      <Switch
+   439→                        checked={item.isActive}
+   440→                        onCheckedChange={(checked) => updateMenuItemMutation.mutate({ id: item.id, isActive: checked })}
+   441→                      />
+   442→                    </div>
+   443→                    <div className="flex items-center gap-2">
+   444→                      <Label className="text-xs text-muted-foreground">Dostupné</Label>
+   445→                      <Switch
+   446→                        checked={item.isAvailable}
+   447→                        onCheckedChange={(checked) => updateMenuItemMutation.mutate({ id: item.id, isAvailable: checked })}
+   448→                      />
+   449→                    </div>
+   450→                  </div>
+   451→                </div>
+   452→              ))}
+   453→            </div>
+   454→          </CardContent>
+   455→        </Card>
+   456→      ))}
+   457→    </div>
+   458→  )
+   459→}
+   460→
+   461→// ─── Admin Settings ───
+   462→function AdminSettings() {
+   463→  const queryClient = useQueryClient()
+   464→
+   465→  const { data: settings, isLoading } = useQuery<RestaurantSettings>({
+   466→    queryKey: ['settings'],
+   467→    queryFn: () => fetch('/api/settings').then(r => r.json()),
+   468→  })
+   469→
+   470→  const [form, setForm] = useState<Partial<RestaurantSettings>>({})
+   471→
+   472→  // Sync form with loaded settings
+   473→  const [synced, setSynced] = useState(false)
+   474→  if (settings && !synced) {
+   475→    setForm({
+   476→      deliveryEnabled: settings.deliveryEnabled,
+   477→      pickupEnabled: settings.pickupEnabled,
+   478→      isOpen: settings.isOpen,
+   479→      customerMessage: settings.customerMessage || '',
+   480→      averagePrepMinutes: settings.averagePrepMinutes,
+   481→      minimumOrderAmount: settings.minimumOrderAmount,
+   482→      storePhone: settings.storePhone || '',
+   483→      storeAddress: settings.storeAddress || '',
+   484→    })
+   485→    setSynced(true)
+   486→  }
+   487→
+   488→  const updateSettingsMutation = useMutation({
+   489→    mutationFn: async (data: Partial<RestaurantSettings>) => {
+   490→      const res = await fetch('/api/settings', {
+   491→        method: 'PUT',
+   492→        headers: { 'Content-Type': 'application/json' },
+   493→        body: JSON.stringify(data),
+   494→      })
+   495→      if (!res.ok) throw new Error('Chyba pri ukladaní')
+   496→      return res.json()
+   497→    },
+   498→    onSuccess: () => {
+   499→      queryClient.invalidateQueries({ queryKey: ['settings'] })
+   500→      toast.success('Nastavenia uložené')
+   501→    },
+   502→    onError: () => toast.error('Chyba pri ukladaní nastavení'),
+   503→  })
+   504→
+   505→  if (isLoading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
+   506→
+   507→  return (
+   508→    <div className="space-y-6 max-w-lg">
+   509→      {/* Toggle settings */}
+   510→      <Card className="p-4 space-y-4">
+   511→        <h3 className="font-semibold flex items-center gap-2">
+   512→          <Settings className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   513→          Prevádzka
+   514→        </h3>
+   515→
+   516→        <div className="flex items-center justify-between">
+   517→          <Label>Otvorené</Label>
+   518→          <Switch
+   519→            checked={form.isOpen}
+   520→            onCheckedChange={(v) => setForm(prev => ({ ...prev, isOpen: v }))}
+   521→          />
+   522→        </div>
+   523→
+   524→        <div className="flex items-center justify-between">
+   525→          <Label>Rozvoz povolený</Label>
+   526→          <Switch
+   527→            checked={form.deliveryEnabled}
+   528→            onCheckedChange={(v) => setForm(prev => ({ ...prev, deliveryEnabled: v }))}
+   529→          />
+   530→        </div>
+   531→
+   532→        <div className="flex items-center justify-between">
+   533→          <Label>Osobný odber povolený</Label>
+   534→          <Switch
+   535→            checked={form.pickupEnabled}
+   536→            onCheckedChange={(v) => setForm(prev => ({ ...prev, pickupEnabled: v }))}
+   537→          />
+   538→        </div>
+   539→      </Card>
+   540→
+   541→      <Card className="p-4 space-y-4">
+   542→        <h3 className="font-semibold flex items-center gap-2">
+   543→          <MessageSquare className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   544→          Správa pre zákazníkov
+   545→        </h3>
+   546→        <Textarea
+   547→          value={form.customerMessage || ''}
+   548→          onChange={(e) => setForm(prev => ({ ...prev, customerMessage: e.target.value }))}
+   549→          placeholder="Např. Vitajte v Pizza Jašterka!"
+   550→          rows={3}
+   551→        />
+   552→      </Card>
+   553→
+   554→      <Card className="p-4 space-y-4">
+   555→        <h3 className="font-semibold flex items-center gap-2">
+   556→          <Clock className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   557→          Čas a objednávky
+   558→        </h3>
+   559→        <div className="space-y-3">
+   560→          <div>
+   561→            <Label>Priemerný čas prípravy (min)</Label>
+   562→            <Input
+   563→              type="number"
+   564→              value={form.averagePrepMinutes || ''}
+   565→              onChange={(e) => setForm(prev => ({ ...prev, averagePrepMinutes: parseInt(e.target.value) || 0 }))}
+   566→            />
+   567→          </div>
+   568→          <div>
+   569→            <Label>Minimálna suma objednávky (€)</Label>
+   570→            <Input
+   571→              type="number"
+   572→              step="0.01"
+   573→              value={form.minimumOrderAmount || ''}
+   574→              onChange={(e) => setForm(prev => ({ ...prev, minimumOrderAmount: parseFloat(e.target.value) || 0 }))}
+   575→            />
+   576→          </div>
+   577→        </div>
+   578→      </Card>
+   579→
+   580→      <Card className="p-4 space-y-4">
+   581→        <h3 className="font-semibold flex items-center gap-2">
+   582→          <Phone className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   583→          Kontakt
+   584→        </h3>
+   585→        <div className="space-y-3">
+   586→          <div>
+   587→            <Label>Telefón</Label>
+   588→            <Input
+   589→              value={form.storePhone || ''}
+   590→              onChange={(e) => setForm(prev => ({ ...prev, storePhone: e.target.value }))}
+   591→              placeholder="+421 900 123 456"
+   592→            />
+   593→          </div>
+   594→          <div>
+   595→            <Label>Adresa</Label>
+   596→            <Input
+   597→              value={form.storeAddress || ''}
+   598→              onChange={(e) => setForm(prev => ({ ...prev, storeAddress: e.target.value }))}
+   599→              placeholder="Hlavná 45, 920 01 Hlohovec"
+   600→            />
+   601→          </div>
+   602→        </div>
+   603→      </Card>
+   604→
+   605→      <Button
+   606→        className="w-full"
+   607→        disabled={updateSettingsMutation.isPending}
+   608→        style={{ backgroundColor: '#4f7f2a', color: 'white' }}
+   609→        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3d6620')}
+   610→        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4f7f2a')}
+   611→        onClick={() => updateSettingsMutation.mutate(form)}
+   612→      >
+   613→        {updateSettingsMutation.isPending ? 'Ukladám...' : 'Uložiť nastavenia'}
+   614→      </Button>
+   615→    </div>
+   616→  )
+   617→}
+   618→
+   619→// ─── Admin Couriers ───
+   620→function AdminCouriers() {
+   621→  const queryClient = useQueryClient()
+   622→
+   623→  const { data: couriers, isLoading } = useQuery<Courier[]>({
+   624→    queryKey: ['couriers'],
+   625→    queryFn: () => fetch('/api/couriers').then(r => r.json()),
+   626→  })
+   627→
+   628→  const updateCourierMutation = useMutation({
+   629→    mutationFn: async ({ courierId, status }: { courierId: string; status: string }) => {
+   630→      const res = await fetch('/api/couriers', {
+   631→        method: 'PATCH',
+   632→        headers: { 'Content-Type': 'application/json' },
+   633→        body: JSON.stringify({ courierId, status }),
+   634→      })
+   635→      if (!res.ok) throw new Error('Chyba pri aktualizácii')
+   636→      return res.json()
+   637→    },
+   638→    onSuccess: () => {
+   639→      queryClient.invalidateQueries({ queryKey: ['couriers'] })
+   640→      toast.success('Stav kuriéra aktualizovaný')
+   641→    },
+   642→    onError: () => toast.error('Chyba pri aktualizácii'),
+   643→  })
+   644→
+   645→  if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+   646→
+   647→  return (
+   648→    <div className="space-y-4">
+   649→      <div className="grid gap-4 sm:grid-cols-2">
+   650→        {couriers?.map((courier) => (
+   651→          <Card key={courier.id} className="p-4">
+   652→            <div className="flex items-start justify-between mb-3">
+   653→              <div>
+   654→                <h4 className="font-semibold">{courier.displayName}</h4>
+   655→                <div className="text-sm text-muted-foreground space-y-0.5 mt-1">
+   656→                  {courier.phone && (
+   657→                    <div className="flex items-center gap-1">
+   658→                      <Phone className="h-3 w-3" />
+   659→                      {courier.phone}
+   660→                    </div>
+   661→                  )}
+   662→                  <div className="flex items-center gap-1">
+   663→                    <Truck className="h-3 w-3" />
+   664→                    {VEHICLE_TYPE_LABELS[courier.vehicleType] || courier.vehicleType}
+   665→                  </div>
+   666→                </div>
+   667→              </div>
+   668→              <Badge className={
+   669→                courier.status === 'AVAILABLE' ? 'bg-green-100 text-green-800' :
+   670→                courier.status === 'OFFLINE' ? 'bg-gray-100 text-gray-800' :
+   671→                courier.status === 'DELIVERING' ? 'bg-blue-100 text-blue-800' :
+   672→                'bg-yellow-100 text-yellow-800'
+   673→              }>
+   674→                {COURIER_STATUS_LABELS[courier.status] || courier.status}
+   675→              </Badge>
+   676→            </div>
+   677→
+   678→            <div className="flex items-center justify-between">
+   679→              <div className="flex items-center gap-2">
+   680→                <Label className="text-xs">Aktívny</Label>
+   681→                <Switch
+   682→                  checked={courier.isActive}
+   683→                  disabled
+   684→                />
+   685→              </div>
+   686→              <Select
+   687→                value={courier.status}
+   688→                onValueChange={(val) => updateCourierMutation.mutate({ courierId: courier.id, status: val })}
+   689→              >
+   690→                <SelectTrigger className="w-32">
+   691→                  <SelectValue />
+   692→                </SelectTrigger>
+   693→                <SelectContent>
+   694→                  <SelectItem value="OFFLINE">Offline</SelectItem>
+   695→                  <SelectItem value="AVAILABLE">Dostupný</SelectItem>
+   696→                  <SelectItem value="BREAK">Pauza</SelectItem>
+   697→                </SelectContent>
+   698→              </Select>
+   699→            </div>
+   700→
+   701→            {courier.activeOrderCount > 0 && (
+   702→              <div className="mt-2 text-xs text-muted-foreground">
+   703→                Aktívne objednávky: {courier.activeOrderCount}
+   704→              </div>
+   705→            )}
+   706→          </Card>
+   707→        ))}
+   708→      </div>
+   709→    </div>
+   710→  )
+   711→}
+   712→
+   713→// ─── Admin Stats ───
+   714→function AdminStats() {
+   715→  const { data: stats, isLoading } = useQuery({
+   716→    queryKey: ['stats'],
+   717→    queryFn: () => fetch('/api/stats').then(r => r.json()),
+   718→  })
+   719→
+   720→  if (isLoading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+   721→
+   722→  return (
+   723→    <div className="space-y-6">
+   724→      {/* Key metrics */}
+   725→      <div className="grid gap-4 sm:grid-cols-3">
+   726→        <Card className="p-4">
+   727→          <div className="flex items-center gap-3">
+   728→            <div className="h-10 w-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#f0f7ec' }}>
+   729→              <ShoppingBag className="h-5 w-5" style={{ color: '#4f7f2a' }} />
+   730→            </div>
+   731→            <div>
+   732→              <p className="text-sm text-muted-foreground">Dnešné objednávky</p>
+   733→              <p className="text-2xl font-bold">{stats?.todaysOrderCount || 0}</p>
+   734→            </div>
+   735→          </div>
+   736→        </Card>
+   737→        <Card className="p-4">
+   738→          <div className="flex items-center gap-3">
+   739→            <div className="h-10 w-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#fff4df' }}>
+   740→              <DollarSign className="h-5 w-5" style={{ color: '#c73325' }} />
+   741→            </div>
+   742→            <div>
+   743→              <p className="text-sm text-muted-foreground">Dnešný obrat</p>
+   744→              <p className="text-2xl font-bold" style={{ color: '#4f7f2a' }}>
+   745→                {formatPrice(stats?.todaysRevenue || 0)}
+   746→              </p>
+   747→            </div>
+   748→          </div>
+   749→        </Card>
+   750→        <Card className="p-4">
+   751→          <div className="flex items-center gap-3">
+   752→            <div className="h-10 w-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#e8f4fd' }}>
+   753→              <TrendingUp className="h-5 w-5 text-blue-600" />
+   754→            </div>
+   755→            <div>
+   756→              <p className="text-sm text-muted-foreground">Celkom objednávok</p>
+   757→              <p className="text-2xl font-bold">
+   758→                {Object.values(stats?.orderCountsByStatus || {}).reduce((a: number, b: number) => a + b, 0) as number}
+   759→              </p>
+   760→            </div>
+   761→          </div>
+   762→        </Card>
+   763→      </div>
+   764→
+   765→      {/* Status breakdown */}
+   766→      <Card className="p-4">
+   767→        <h3 className="font-semibold mb-4 flex items-center gap-2">
+   768→          <BarChart3 className="h-4 w-4" style={{ color: '#4f7f2a' }} />
+   769→          Objednávky podľa stavu
+   770→        </h3>
+   771→        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+   772→          {Object.entries(ORDER_STATUS_LABELS).map(([status, label]) => {
+   773→            const count = (stats?.orderCountsByStatus?.[status] || 0) as number
+   774→            return (
+   775→              <div key={status} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+   776→                <div className="flex items-center gap-2">
+   777→                  <Badge className={`text-xs ${getStatusColor(status as OrderStatus)}`}>{label}</Badge>
+   778→                </div>
+   779→                <span className="text-lg font-bold">{count}</span>
+   780→              </div>
+   781→            )
+   782→          })}
+   783→        </div>
+   784→      </Card>
+   785→    </div>
+   786→  )
+   787→}
+   788→

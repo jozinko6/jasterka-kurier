@@ -1,27 +1,27 @@
-# Pizza Jašterka Delivery System — Worklog
-
 ---
 Task ID: 1
-Agent: Main
-Task: Build complete backend + frontend for Pizza Jašterka delivery system
+Agent: main
+Task: Separate Kitchen, Admin, and Courier into their own routes; make Kitchen and Courier PWAs with install-to-homescreen
 
 Work Log:
-- Analyzed the original pizza-jasterka repo (3 frontends: CustomerApp, RiderApp, Admin Dashboard - all pointing to legacy Enatega backend)
-- Identified 29 phases from the plan, determined what was implemented vs documented only
-- Created Prisma schema adapted for SQLite (14 models, 8 enums)
-- Pushed schema to database successfully
-- Created comprehensive seed data (5 users, 6 categories, 11 menu items, 60 options, 7 zones, 1 sample order, settings, opening hours)
-- Built 15 API route files: menu, orders, kitchen, couriers, zones, dispatch, settings, admin/menu, admin/categories, auth, stats, courier-earnings, opening-hours
-- Built complete frontend with 4 sections: Objednávka (customer), Kuchyňa (kitchen), Admin, Kuriér (courier)
-- Fixed critical pizza configurator bug (selectedSize not initialized with defaultSize)
-- Fixed accessibility issues (missing DialogDescription/SheetDescription)
-- All lint checks pass, all browser tests pass
+- Created PWA infrastructure: usePWAInstall hook, PWAInstallBanner component, PWAInstallInstructions component
+- Created useServiceWorker hook for service worker registration
+- Created web app manifests: manifest-kuchyna.json, manifest-kurier.json
+- Created service workers: sw-kuchyna.js, sw-kurier.js (cache-first for static, network-first for API)
+- Generated PWA icons using AI image generation: icon-kuchyna-512.png, icon-kurier-512.png, and 192px versions
+- Refactored / page.tsx to only show customer ordering flow (no more sidebar navigation)
+- Created /kuchyna route with PWA: layout.tsx (manifest + viewport metadata), page.tsx (dark theme kitchen panel with install banner)
+- Created /kurier route with PWA: layout.tsx (manifest + viewport metadata), page.tsx (green theme courier panel with install banner)
+- Created /admin route: layout.tsx, page.tsx (regular web page, no PWA)
+- Fixed lint error in usePWAInstall.ts (setState in effect → useSyncExternalStore)
+- All lint checks pass
+- Browser-verified all 4 routes: /, /kuchyna, /admin, /kurier — all render correctly
 
 Stage Summary:
-- Complete backend with SQLite database, 15 REST API endpoints
-- Full customer ordering flow: browse menu → configure pizza → add to cart → checkout → order tracking
-- Kitchen kanban panel with status progression
-- Admin dashboard with 5 tabs (orders, menu, settings, couriers, stats)
-- Courier view with online/offline toggle
-- Slovak language throughout
-- Jasterka brand colors (green #4f7f2a, tomato #c73325, cream #fff4df)
+- Customer page (/) now only shows the ordering flow — no kitchen/admin/courier access
+- Kitchen (/kuchyna) is a standalone PWA with dark theme, install banner, service worker
+- Courier (/kurier) is a standalone PWA with green theme, install banner, service worker
+- Admin (/admin) is a separate regular page (no PWA needed)
+- Both PWA pages have "Uložiť na plochu" (Save to homescreen) buttons with iOS/Android instructions
+- Auto-install banner appears when browser supports beforeinstallprompt
+- Manual install instructions shown for iOS Safari users
