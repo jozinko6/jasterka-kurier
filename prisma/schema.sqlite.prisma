@@ -93,6 +93,20 @@ model User {
   orderStatusChanges OrderStatusHistory[]
   deliveryAssignments DeliveryAssignment[] @relation("AssignmentActor")
   kitchenEvents      KitchenEvent[]
+  sessions           AuthSession[]
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Customer {

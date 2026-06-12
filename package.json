@@ -4,17 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "build": "prisma generate && next build --webpack",
+    "build": "prisma generate --schema=prisma/schema.sqlite.prisma && next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "postinstall": "prisma generate --schema=prisma/schema.sqlite.prisma",
     "db:push": "prisma db push --schema=prisma/schema.sqlite.prisma",
     "db:generate": "prisma generate --schema=prisma/schema.sqlite.prisma",
     "db:migrate": "prisma migrate dev --schema=prisma/schema.sqlite.prisma",
-    "db:migrate:prod": "prisma migrate deploy",
+    "db:migrate:prod": "prisma db push --schema=prisma/schema.prisma",
     "db:reset": "prisma migrate reset --schema=prisma/schema.sqlite.prisma",
     "db:seed": "bunx prisma db seed --schema=prisma/schema.sqlite.prisma",
-    "vercel-build": "prisma generate && prisma migrate deploy && next build --webpack"
+    "vercel-build": "prisma generate --schema=prisma/schema.prisma && prisma db push --schema=prisma/schema.prisma && next build --webpack"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

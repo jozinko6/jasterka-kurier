@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { OrderStatus } from '@prisma/client'
 import { decimalToNumber } from '@/lib/decimal-utils'
-import { requireRole, authenticateRequest } from '@/lib/auth'
+import { requireRole } from '@/lib/auth'
 import { createOrderSchema, validateBody } from '@/lib/validations'
+import crypto from 'crypto'
+
+function createOrderNumber(): string {
+  const timestamp = Date.now().toString(36).toUpperCase()
+  const suffix = crypto.randomBytes(2).toString('hex').toUpperCase()
+  return `JAS-${timestamp}-${suffix}`
+}
 
 export async function GET(request: NextRequest) {
   try {
-    // Require authentication for viewing orders
-    const authResult = await authenticateRequest(request)
+    // Staff-only endpoint for viewing order lists.
+    const authResult = await requireRole(request, ['ADMIN', 'KITCHEN', 'COURIER', 'OWNER'])
     if ('error' in authResult) {
       return authResult.error
     }
@@ -82,7 +89,10 @@ export async function POST(request: NextRequest) {
     })
 
     // Build a map for quick lookup
-    const menuItemMap = new Map(menuItems.map((mi) => [mi.id, mi]))
+    type MenuItemWithOptions = (typeof menuItems)[number]
+    const menuItemMap = new Map<string, MenuItemWithOptions>(
+      menuItems.map((mi) => [mi.id, mi])
+    )
 
     // Calculate order items with server-side price calculation
     let subtotalAmount = 0
@@ -168,22 +178,9 @@ export async function POST(request: NextRequest) {
 
     const totalAmount = subtotalAmount + deliveryFee
 
-    // Generate order number atomically using a counter in a transaction
+    // Generate a collision-resistant public order number.
     const order = await db.$transaction(async (tx) => {
-      // Use an advisory-style counter: find the max order number and increment
-      const lastOrder = await tx.order.findFirst({
-        orderBy: { createdAt: 'desc' },
-        select: { orderNumber: true },
-      })
-
-      let nextNumber = 1001
-      if (lastOrder && lastOrder.orderNumber) {
-        const match = lastOrder.orderNumber.match(/JAS-(\d+)/)
-        if (match) {
-          nextNumber = parseInt(match[1], 10) + 1
-        }
-      }
-      const orderNumber = `JAS-${nextNumber}`
+      const orderNumber = createOrderNumber()
 
       return tx.order.create({
         data: {

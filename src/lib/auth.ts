@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { UserRole } from '@prisma/client'
+import crypto from 'crypto'
 
 // ─── Types ───
 
@@ -19,60 +20,100 @@ export interface AuthResult {
 
 // ─── Session Management ───
 
-// Simple token-based session stored in memory
-// In production, use NextAuth.js or a proper session store
 interface Session {
   userId: string
   role: UserRole
-  createdAt: number
-  expiresAt: number
+  createdAt: Date
+  expiresAt: Date
 }
 
-const sessions = new Map<string, Session>()
 const SESSION_TTL = 8 * 60 * 60 * 1000 // 8 hours
+export const SESSION_COOKIE_NAME = 'jasterka_session'
 
-// Clean expired sessions every 30 minutes
-if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now()
-    for (const [token, session] of sessions) {
-      if (session.expiresAt < now) {
-        sessions.delete(token)
-      }
-    }
-  }, 30 * 60 * 1000)
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex')
 }
 
 function generateToken(): string {
-  const array = new Uint8Array(32)
-  crypto.getRandomValues(array)
-  return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('')
+  return crypto.randomBytes(32).toString('base64url')
 }
 
-export function createSession(userId: string, role: UserRole): string {
-  const token = generateToken()
-  const now = Date.now()
-  sessions.set(token, {
-    userId,
-    role,
-    createdAt: now,
-    expiresAt: now + SESSION_TTL,
+function parseToken(token: string): { sessionId: string; secret: string } | null {
+  const [sessionId, secret] = token.split('.')
+  if (!sessionId || !secret) return null
+  return { sessionId, secret }
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const aBuffer = Buffer.from(a)
+  const bBuffer = Buffer.from(b)
+  return aBuffer.length === bBuffer.length && crypto.timingSafeEqual(aBuffer, bBuffer)
+}
+
+export async function createSession(userId: string, role: UserRole): Promise<string> {
+  const secret = generateToken()
+  const session = await db.authSession.create({
+    data: {
+      userId,
+      tokenHash: hashToken(secret),
+      expiresAt: new Date(Date.now() + SESSION_TTL),
+    },
+    select: { id: true },
   })
-  return token
+
+  return `${session.id}.${secret}`
 }
 
-export function getSession(token: string): Session | null {
-  const session = sessions.get(token)
-  if (!session) return null
-  if (session.expiresAt < Date.now()) {
-    sessions.delete(token)
+export async function getSession(token: string): Promise<Session | null> {
+  const parsed = parseToken(token)
+  if (!parsed) return null
+
+  const session = await db.authSession.findUnique({
+    where: { id: parsed.sessionId },
+    include: {
+      user: {
+        select: { role: true },
+      },
+    },
+  })
+
+  if (!session || session.expiresAt < new Date()) {
+    if (session) {
+      await db.authSession.delete({ where: { id: session.id } }).catch(() => null)
+    }
     return null
   }
-  return session
+
+  if (!constantTimeEqual(session.tokenHash, hashToken(parsed.secret))) {
+    return null
+  }
+
+  return {
+    userId: session.userId,
+    role: session.user.role,
+    createdAt: session.createdAt,
+    expiresAt: session.expiresAt,
+  }
 }
 
-export function deleteSession(token: string): void {
-  sessions.delete(token)
+export async function deleteSession(token: string): Promise<void> {
+  const parsed = parseToken(token)
+  if (!parsed) return
+
+  await db.authSession
+    .deleteMany({
+      where: {
+        id: parsed.sessionId,
+        tokenHash: hashToken(parsed.secret),
+      },
+    })
+    .catch(() => null)
+}
+
+export function getRequestToken(request: NextRequest): string | null {
+  const authHeader = request.headers.get('Authorization')
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null
+  return bearerToken || request.cookies.get(SESSION_COOKIE_NAME)?.value || null
 }
 
 // ─── Password Verification ───
@@ -90,8 +131,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 export async function authenticateRequest(
   request: NextRequest
 ): Promise<{ user: AuthUser } | { error: NextResponse }> {
-  const authHeader = request.headers.get('Authorization')
-  const token = authHeader?.replace('Bearer ', '')
+  const token = getRequestToken(request)
 
   if (!token) {
     return {
@@ -102,7 +142,7 @@ export async function authenticateRequest(
     }
   }
 
-  const session = getSession(token)
+  const session = await getSession(token)
   if (!session) {
     return {
       error: NextResponse.json(

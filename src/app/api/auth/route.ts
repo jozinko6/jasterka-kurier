@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyPassword, createSession, getSession, deleteSession, authenticateRequest } from '@/lib/auth'
+import {
+  verifyPassword,
+  createSession,
+  deleteSession,
+  authenticateRequest,
+  getRequestToken,
+  SESSION_COOKIE_NAME,
+} from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session token
-    const token = createSession(user.id, user.role)
+    const token = await createSession(user.id, user.role)
 
     // Return user info with token
     const result = {
@@ -64,7 +71,15 @@ export async function POST(request: NextRequest) {
       },
     }
 
-    return NextResponse.json(result)
+    const response = NextResponse.json(result)
+    response.cookies.set(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 8 * 60 * 60,
+    })
+    return response
   } catch (error) {
     console.error('Error during login:', error)
     return NextResponse.json(
@@ -98,14 +113,20 @@ export async function GET(request: NextRequest) {
 // DELETE /api/auth - Logout (invalidate session)
 export async function DELETE(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization')
-    const token = authHeader?.replace('Bearer ', '')
+    const token = getRequestToken(request)
 
     if (token) {
-      deleteSession(token)
+      await deleteSession(token)
     }
-
-    return NextResponse.json({ message: 'Odhlásené' })
+    const response = NextResponse.json({ message: 'Odhlasene' })
+    response.cookies.set(SESSION_COOKIE_NAME, '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 0,
+    })
+    return response
   } catch (error) {
     console.error('Error during logout:', error)
     return NextResponse.json(

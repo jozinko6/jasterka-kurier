@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { decimalToNumber } from '@/lib/decimal-utils'
-import { requireRole, authenticateRequest } from '@/lib/auth'
+import { requireRole } from '@/lib/auth'
 import { createCategorySchema, validateBody } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   try {
-    // Require authentication for admin category list
-    const authResult = await authenticateRequest(request)
+    // Admin-only category management view
+    const authResult = await requireRole(request, ['ADMIN', 'OWNER'])
     if ('error' in authResult) {
       return authResult.error
     }

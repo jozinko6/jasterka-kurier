@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { CourierStatus } from '@prisma/client'
-import { requireRole, authenticateRequest } from '@/lib/auth'
+import { requireRole } from '@/lib/auth'
 import { updateCourierStatusSchema, validateBody } from '@/lib/validations'
 
 export async function GET(request: NextRequest) {
   try {
     // Couriers and admins can view courier list
-    const authResult = await authenticateRequest(request)
+    const authResult = await requireRole(request, ['ADMIN', 'COURIER', 'OWNER'])
     if ('error' in authResult) {
       return authResult.error
     }

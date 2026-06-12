@@ -7,7 +7,7 @@ import { Prisma } from '@prisma/client'
  */
 export function decimalToNumber<T>(value: T): T {
   if (value instanceof Prisma.Decimal) {
-    return value.toNumber() as T
+    return (value as Prisma.Decimal).toNumber() as T
   }
   if (value === null || value === undefined) {
     return value

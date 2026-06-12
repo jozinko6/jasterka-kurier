@@ -26,7 +26,7 @@ export function LoginForm({
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const { login } = useAuthStore()
+  const { login, logout } = useAuthStore()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,6 +37,7 @@ export function LoginForm({
       const user = await login(email, password)
 
       if (requiredRole && !requiredRole.includes(user.role)) {
+        await logout()
         setError(`Táto stránka vyžaduje rolu: ${requiredRole.join(', ')}`)
         return
       }

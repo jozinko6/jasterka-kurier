@@ -1,0 +1,312 @@
+# Debug Report For AI Agent
+
+Repository: `jozinko6/jasterka-kurier`
+Local path: `C:\Users\Test_Admin\Desktop\Pokusy\Jasterka - kurier\jasterka-kurier`
+Audit date: 2026-06-12
+
+This report is for the next AI/code agent. The previous pass was read-only except dependency/build artifacts. Do not assume the code is production-safe.
+
+## Current Verification Results
+
+Commands run:
+
+```powershell
+npm.cmd install --package-lock=false
+npm.cmd run lint
+npm.cmd run build
+npx.cmd tsc --noEmit
+npx.cmd next build --webpack
+.\node_modules\.bin\prisma.cmd validate
+.\node_modules\.bin\prisma.cmd validate --schema=prisma/schema.sqlite.prisma
+```
+
+Results:
+
+- `npm install --package-lock=false` completed.
+- `npm run lint` fails with 2 React lint errors:
+  - `src/components/ui/carousel.tsx:98`
+  - `src/hooks/use-mobile.ts:14`
+- `npm run build` fails on Windows because Next/Turbopack cannot load native bindings. Next recommends `next build --webpack`.
+- `npx next build --webpack` succeeds, but it skips TypeScript validation because `next.config.ts` has `typescript.ignoreBuildErrors = true`.
+- `npx tsc --noEmit` fails with real TypeScript errors.
+- Both Prisma schemas validate syntactically.
+- `npm audit` could not run because there is no `package-lock.json`. npm install output reported 4 moderate vulnerabilities.
+
+## Priority 0 - Security And Access Control
+
+### 1. Authentication Is Broken
+
+Problem:
+
+- Seed creates password hashes with `bcrypt`.
+- Login compares password using plain SHA-256.
+- Seeded users such as `admin@jasterka.sk` with `admin123` will not authenticate.
+
+Files:
+
+- `src/app/api/auth/route.ts`
+- `prisma/seed.ts`
+
+Fix:
+
+- Replace SHA-256 comparison with `bcrypt.compare(password, user.passwordHash)`.
+- Keep password hashes generated with `bcrypt.hash`.
+- Return a proper session/token or integrate NextAuth/Auth.js instead of returning only user info.
+
+### 2. API Routes Lack Server-Side Authorization
+
+Problem:
+
+Admin/kitchen/courier operations can be called directly over HTTP. The UI separation does not protect the API.
+
+High-risk files:
+
+- `src/app/api/orders/route.ts`
+- `src/app/api/orders/[id]/route.ts`
+- `src/app/api/admin/menu/route.ts`
+- `src/app/api/admin/categories/route.ts`
+- `src/app/api/settings/route.ts`
+- `src/app/api/couriers/route.ts`
+- `src/app/api/dispatch/route.ts`
+- `src/app/api/kitchen/route.ts`
+- `src/app/api/stats/route.ts`
+- `src/app/api/courier-earnings/route.ts`
+- `src/app/api/opening-hours/route.ts`
+
+Fix:
+
+- Add shared server-side auth helper, for example `requireRole(["ADMIN"])`, `requireRole(["KITCHEN", "ADMIN"])`, `requireRole(["COURIER", "ADMIN"])`.
+- Apply it to every non-public route.
+- Public routes should be limited to menu browsing, zones, settings read-only if intended, and order creation/tracking with a safe token or customer-owned identifier.
+
+### 3. Secrets And Local Artifacts Are Tracked
+
+Problem:
+
+The repo tracks files that should not be committed:
+
+- `.env`
+- `db/custom.db`
+- `tool-results/*`
+- `upload/*`
+
+`.gitignore` already ignores `.env*`, but `.env` is still tracked from before the ignore rule.
+
+Fix:
+
+- Remove sensitive/local files from git tracking.
+- Add `.env.example` with placeholder variables only.
+- Rotate any secret that may have been used outside local dev, especially `NEXTAUTH_SECRET`.
+- Decide whether upload PDFs/images belong in the repo; if not, remove them too.
+
+## Priority 1 - Build Correctness
+
+### 4. TypeScript Errors Are Hidden
+
+Problem:
+
+`next.config.ts` disables build-time type checking:
+
+```ts
+typescript: {
+  ignoreBuildErrors: true,
+}
+```
+
+Known `npx tsc --noEmit` failures:
+
+- `examples/websocket/frontend.tsx`: missing `socket.io-client`.
+- `examples/websocket/server.ts`: missing `socket.io`.
+- `src/app/api/opening-hours/route.ts`: `any` assigned to `never`.
+- `src/app/api/orders/route.ts`: `menuItem` inferred as `{}` in map lookup.
+- `src/components/jasterka/AdminSection.tsx`: reduce over `unknown`.
+- `src/components/jasterka/OrderSection.tsx`: string array values not typed as `OrderStatus`.
+- `src/components/jasterka/OrderSection.tsx`: invalid CSS property `ringColor`.
+- `src/lib/decimal-utils.ts`: generic `T` does not expose `.toNumber()`.
+
+Fix:
+
+- Fix all `tsc` errors.
+- Remove `ignoreBuildErrors`.
+- Keep CI/build failing on type errors.
+
+### 5. Turbopack Build Fails On Current Windows Setup
+
+Problem:
+
+`npm run build` uses default Next build, which attempts Turbopack with native bindings and fails:
+
+```text
+Turbopack is not supported on this platform because native bindings are not available.
+To build on this platform, use Webpack instead: next build --webpack
+```
+
+Fix options:
+
+- Change build script to `prisma generate && next build --webpack`, or
+- Fix the native binding environment and keep Turbopack.
+
+Given current environment, Webpack is the practical path.
+
+## Priority 2 - Data Integrity
+
+### 6. Order Number Generation Is Race-Prone
+
+File:
+
+- `src/app/api/orders/route.ts`
+
+Problem:
+
+Order number is generated by reading the latest order and adding 1. Two concurrent requests can generate the same `JAS-####`.
+
+Fix:
+
+- Use a database sequence/counter table inside a transaction, or
+- Generate a collision-resistant order code and retry on unique constraint failure.
+
+### 7. Dispatch Is Not Transactional
+
+File:
+
+- `src/app/api/dispatch/route.ts`
+
+Problem:
+
+Dispatch does three separate writes:
+
+- create delivery assignment
+- update order status/history
+- increment courier active order count
+
+If one write fails after another succeeds, data becomes inconsistent.
+
+Fix:
+
+- Wrap all related writes in `db.$transaction`.
+- Validate order status before assignment.
+- Prevent duplicate active assignments for the same order unless explicitly supported.
+
+### 8. Status Transitions Are Not Validated
+
+File:
+
+- `src/app/api/orders/[id]/route.ts`
+
+Problem:
+
+Any provided `status` is cast to `OrderStatus` and written. There is no transition graph.
+
+Fix:
+
+- Validate status with Zod/native enum.
+- Enforce allowed transitions, for example `NEW -> ACCEPTED -> IN_KITCHEN -> PREPARING -> READY`.
+- Restrict transitions by role.
+
+## Priority 3 - Input Validation
+
+### 9. Replace Ad Hoc Parsing With Schemas
+
+Problems:
+
+- `parseFloat(String(...))` can produce `NaN`.
+- `quantity` can be negative, zero, fractional, or huge.
+- `status as OrderStatus` bypasses validation.
+- Customer/contact/address fields have no length limits.
+- Menu and settings writes accept weakly typed bodies.
+
+Files:
+
+- `src/app/api/orders/route.ts`
+- `src/app/api/orders/[id]/route.ts`
+- `src/app/api/admin/menu/route.ts`
+- `src/app/api/admin/categories/route.ts`
+- `src/app/api/settings/route.ts`
+- `src/app/api/couriers/route.ts`
+- `src/app/api/opening-hours/route.ts`
+
+Fix:
+
+- Use `zod` request schemas for every API route.
+- Return `400` with clear errors on invalid input.
+- Add numeric bounds, string length limits, enum validation, and integer quantity checks.
+
+## Priority 4 - Prisma And Environment Cleanup
+
+### 10. Prisma Schema Setup Is Confusing
+
+Problem:
+
+- Main `prisma/schema.prisma` is PostgreSQL.
+- Dev scripts use `prisma/schema.sqlite.prisma`.
+- `.env` points to SQLite.
+- `prisma generate` in `build` uses the main PostgreSQL schema.
+
+Fix:
+
+- Choose one dev/prod strategy and document it.
+- If SQLite is for local dev, make scripts explicit and ensure generated client matches the runtime DB.
+- Consider a `prisma.config.ts`; Prisma warns that `package.json#prisma` is deprecated for Prisma 7.
+
+## Priority 5 - Lint And UI Issues
+
+### 11. React Lint Errors
+
+Files:
+
+- `src/components/ui/carousel.tsx:98`
+- `src/hooks/use-mobile.ts:14`
+
+Problem:
+
+React lint reports synchronous state updates inside effects.
+
+Fix:
+
+- Move initial state derivation into the `useState` initializer where possible.
+- For carousel, avoid calling a state-setting callback synchronously in the effect body; initialize from callback/event path safely.
+
+### 12. Potential Encoding Display Confusion
+
+Observation:
+
+Some terminal output rendered Slovak text as mojibake in PowerShell, but `Select-String` showed proper diacritics. This may be console encoding only.
+
+Fix:
+
+- Before editing text-heavy UI files, verify file encoding is UTF-8.
+- Preserve proper Slovak diacritics.
+
+## Suggested Fix Order
+
+1. Add auth/session helper and protect API routes by role.
+2. Fix bcrypt login mismatch.
+3. Remove tracked `.env`, local DB, tool results, and any non-source artifacts that should not be in git; add `.env.example`.
+4. Add Zod schemas for API request bodies and params.
+5. Make order creation and dispatch transactional.
+6. Fix TypeScript errors and remove `ignoreBuildErrors`.
+7. Change build script to Webpack or fix Turbopack native binding issue.
+8. Fix lint errors.
+9. Clarify Prisma schema/dev DB setup.
+10. Add tests for auth, role protection, order creation, status transitions, and dispatch transaction behavior.
+
+## Final Acceptance Checks
+
+Run:
+
+```powershell
+npm.cmd run lint
+npx.cmd tsc --noEmit
+npm.cmd run build
+.\node_modules\.bin\prisma.cmd validate
+.\node_modules\.bin\prisma.cmd validate --schema=prisma/schema.sqlite.prisma
+```
+
+Expected target state:
+
+- Lint passes.
+- TypeScript passes without `ignoreBuildErrors`.
+- Build passes on the intended platform.
+- Protected API endpoints reject unauthenticated and unauthorized requests.
+- Seeded users can log in with their seeded passwords.
+- Public order creation cannot create invalid prices, quantities, statuses, or malformed data.
