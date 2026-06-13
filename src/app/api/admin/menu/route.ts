@@ -131,3 +131,57 @@ export async function PUT(request: NextRequest) {
     )
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const authResult = await requireRole(request, ['ADMIN', 'OWNER'])
+    if ('error' in authResult) {
+      return authResult.error
+    }
+
+    const { id } = await request.json()
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json(
+        { error: 'ID položky menu je povinné' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.menuItem.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Položka menu nenájdená' },
+        { status: 404 }
+      )
+    }
+
+    const orderItemCount = await db.orderItem.count({
+      where: { menuItemId: id },
+    })
+
+    if (orderItemCount > 0) {
+      const updatedMenuItem = await db.menuItem.update({
+        where: { id },
+        data: { isActive: false, isAvailable: false },
+        include: {
+          category: true,
+          options: { orderBy: { sortOrder: 'asc' } },
+        },
+      })
+
+      return NextResponse.json({
+        item: decimalToNumber(updatedMenuItem),
+        deactivated: true,
+      })
+    }
+
+    await db.menuItem.delete({ where: { id } })
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    console.error('Error deleting menu item:', error)
+    return NextResponse.json(
+      { error: 'Nepodarilo sa odobrať položku menu' },
+      { status: 500 }
+    )
+  }
+}

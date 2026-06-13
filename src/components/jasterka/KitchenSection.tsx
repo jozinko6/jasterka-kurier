@@ -25,20 +25,23 @@ import {
 const KITCHEN_COLUMNS: { status: OrderStatus; label: string; color: string }[] = [
   { status: 'NEW', label: 'Nové', color: '#3b82f6' },
   { status: 'ACCEPTED', label: 'Prijaté', color: '#8b5cf6' },
-  { status: 'IN_KITCHEN', label: 'Pripravuje sa', color: '#f59e0b' },
+  { status: 'IN_KITCHEN', label: 'V kuchyni', color: '#f59e0b' },
+  { status: 'PREPARING', label: 'Pripravuje sa', color: '#f97316' },
   { status: 'READY', label: 'Hotové', color: '#22c55e' },
 ]
 
 const NEXT_STATUS_MAP: Record<string, OrderStatus> = {
   NEW: 'ACCEPTED',
   ACCEPTED: 'IN_KITCHEN',
-  IN_KITCHEN: 'READY',
+  IN_KITCHEN: 'PREPARING',
+  PREPARING: 'READY',
 }
 
 const NEXT_STATUS_LABEL: Record<string, string> = {
   NEW: 'Prijať',
   ACCEPTED: 'Do kuchyne',
-  IN_KITCHEN: 'Hotové',
+  IN_KITCHEN: 'Začať prípravu',
+  PREPARING: 'Hotové',
 }
 
 export function KitchenSection() {
@@ -96,8 +99,8 @@ export function KitchenSection() {
 
       {/* Kanban board */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4">
-          {[1, 2, 3, 4].map(i => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 p-4">
+          {[1, 2, 3, 4, 5].map(i => (
             <div key={i} className="space-y-3">
               <Skeleton className="h-10 rounded-lg" />
               <Skeleton className="h-32 rounded-xl" />
@@ -107,7 +110,7 @@ export function KitchenSection() {
         </div>
       ) : (
         <div className="flex-1 overflow-x-auto p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-[800px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 min-w-[1000px]">
             {KITCHEN_COLUMNS.map((col) => (
               <div key={col.status} className="space-y-3">
                 {/* Column header */}

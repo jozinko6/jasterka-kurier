@@ -56,6 +56,27 @@ export const updateCourierStatusSchema = z.object({
   }),
 })
 
+export const createCourierSchema = z.object({
+  displayName: z.string().min(1, 'Meno kuriéra je povinné'),
+  email: z.email('Neplatný email').optional().nullable().or(z.literal('')),
+  phone: z.string().optional().nullable(),
+  password: z.string().min(6, 'Heslo musí mať aspoň 6 znakov'),
+  vehicleType: z.enum(['BICYCLE', 'SCOOTER', 'CAR']).optional(),
+  status: z.enum(['OFFLINE', 'AVAILABLE', 'ASSIGNED', 'PICKING_UP', 'DELIVERING', 'BREAK']).optional(),
+  isActive: z.boolean().optional(),
+})
+
+export const updateCourierSchema = z.object({
+  courierId: z.string().min(1, 'ID kuriéra je povinné'),
+  displayName: z.string().min(1, 'Meno kuriéra je povinné').optional(),
+  email: z.email('Neplatný email').optional().nullable().or(z.literal('')),
+  phone: z.string().optional().nullable(),
+  password: z.string().min(6, 'Heslo musí mať aspoň 6 znakov').optional().or(z.literal('')),
+  vehicleType: z.enum(['BICYCLE', 'SCOOTER', 'CAR']).optional(),
+  status: z.enum(['OFFLINE', 'AVAILABLE', 'ASSIGNED', 'PICKING_UP', 'DELIVERING', 'BREAK']).optional(),
+  isActive: z.boolean().optional(),
+})
+
 // ─── Menu / Category Schemas ───
 
 export const createCategorySchema = z.object({

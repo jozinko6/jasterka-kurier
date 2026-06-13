@@ -119,7 +119,7 @@ export interface Courier {
   status: 'OFFLINE' | 'AVAILABLE' | 'ASSIGNED' | 'PICKING_UP' | 'DELIVERING' | 'BREAK'
   isActive: boolean
   activeOrderCount: number
-  user?: { email: string | null }
+  user?: { id?: string; email: string | null; phone?: string | null; role?: string; isActive?: boolean }
 }
 
 export interface RestaurantSettings {

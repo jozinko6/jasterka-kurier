@@ -22,7 +22,7 @@ export function LoginForm({
   description = 'Zadajte svoje prihlasovacie údaje',
   onSuccess,
 }: LoginFormProps) {
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -34,7 +34,7 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
-      const user = await login(email, password)
+      const user = await login(identifier, password)
 
       if (requiredRole && !requiredRole.includes(user.role)) {
         await logout()
@@ -68,15 +68,15 @@ export function LoginForm({
               </Alert>
             )}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email alebo telefón</Label>
               <Input
                 id="email"
-                type="email"
-                placeholder="vas@email.sk"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                placeholder="kurier@email.sk alebo +421..."
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 required
-                autoComplete="email"
+                autoComplete="username"
               />
             </div>
             <div className="space-y-2">

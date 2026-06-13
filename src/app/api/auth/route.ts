@@ -13,22 +13,27 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { email, password } = body
+    const identifier = typeof email === 'string' ? email.trim() : ''
 
-    if (!email || !password) {
+    if (!identifier || !password) {
       return NextResponse.json(
-        { error: 'Chýbajú povinné polia: email, heslo' },
+        { error: 'Chýbajú povinné polia: prihlasovacie meno, heslo' },
         { status: 400 }
       )
     }
 
-    // Find user by email
-    const user = await db.user.findUnique({
-      where: { email },
+    const user = await db.user.findFirst({
+      where: {
+        OR: [
+          { email: identifier.toLowerCase() },
+          { phone: identifier },
+        ],
+      },
     })
 
     if (!user) {
       return NextResponse.json(
-        { error: 'Neplatný email alebo heslo' },
+        { error: 'Neplatné prihlasovacie údaje' },
         { status: 401 }
       )
     }
@@ -36,7 +41,7 @@ export async function POST(request: NextRequest) {
     // Verify password using bcrypt
     if (!user.passwordHash) {
       return NextResponse.json(
-        { error: 'Neplatný email alebo heslo' },
+        { error: 'Neplatné prihlasovacie údaje' },
         { status: 401 }
       )
     }
@@ -44,7 +49,7 @@ export async function POST(request: NextRequest) {
     const isValid = await verifyPassword(password, user.passwordHash)
     if (!isValid) {
       return NextResponse.json(
-        { error: 'Neplatný email alebo heslo' },
+        { error: 'Neplatné prihlasovacie údaje' },
         { status: 401 }
       )
     }

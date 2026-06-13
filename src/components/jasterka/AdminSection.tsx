@@ -1,10 +1,10 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authFetch } from '@/stores/auth-store'
 import { toast } from 'sonner'
-import type { Order, OrderStatus, Courier, DeliveryZone, RestaurantSettings, MenuCategory } from '@/lib/types'
+import type { Order, OrderStatus, Courier, DeliveryZone, RestaurantSettings, MenuCategory, MenuItem } from '@/lib/types'
 import { formatPrice, getStatusColor, ORDER_STATUS_LABELS, COURIER_STATUS_LABELS, VEHICLE_TYPE_LABELS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -52,38 +52,42 @@ import {
   MessageSquare,
   User,
   Clock,
+  Plus,
+  Pencil,
+  Trash2,
+  CheckCircle2,
 } from 'lucide-react'
 
 export function AdminSection() {
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b">
-        <h2 className="text-xl font-bold" style={{ color: '#4f7f2a' }}>Administrácia</h2>
-        <p className="text-sm text-muted-foreground">Správa objednávok, menu a nastavení</p>
+        <h2 className="text-xl font-bold" style={{ color: '#4f7f2a' }}>AdministrĂˇcia</h2>
+        <p className="text-sm text-muted-foreground">SprĂˇva objednĂˇvok, menu a nastavenĂ­</p>
       </div>
 
       <Tabs defaultValue="orders" className="flex-1 flex flex-col">
         <div className="px-4 pt-2">
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-transparent p-0">
-            <TabsTrigger value="orders" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+            <TabsTrigger value="orders" className="rounded-md data-[state=active]:bg-[#4f7f2a] data-[state=active]:text-white data-[state=active]:shadow-sm text-sm px-3 py-2">
               <ClipboardList className="h-4 w-4 mr-1" />
-              Objednávky
+              ObjednĂˇvky
             </TabsTrigger>
-            <TabsTrigger value="menu" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+            <TabsTrigger value="menu" className="rounded-md data-[state=active]:bg-[#4f7f2a] data-[state=active]:text-white data-[state=active]:shadow-sm text-sm px-3 py-2">
               <UtensilsCrossed className="h-4 w-4 mr-1" />
               Menu
             </TabsTrigger>
-            <TabsTrigger value="settings" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+            <TabsTrigger value="settings" className="rounded-md data-[state=active]:bg-[#4f7f2a] data-[state=active]:text-white data-[state=active]:shadow-sm text-sm px-3 py-2">
               <Settings className="h-4 w-4 mr-1" />
               Nastavenia
             </TabsTrigger>
-            <TabsTrigger value="couriers" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+            <TabsTrigger value="couriers" className="rounded-md data-[state=active]:bg-[#4f7f2a] data-[state=active]:text-white data-[state=active]:shadow-sm text-sm px-3 py-2">
               <Users className="h-4 w-4 mr-1" />
-              Kuriéri
+              KuriĂ©ri
             </TabsTrigger>
-            <TabsTrigger value="stats" className="rounded-md data-[state=active]:text-white text-sm px-3 py-2">
+            <TabsTrigger value="stats" className="rounded-md data-[state=active]:bg-[#4f7f2a] data-[state=active]:text-white data-[state=active]:shadow-sm text-sm px-3 py-2">
               <BarChart3 className="h-4 w-4 mr-1" />
-              Štatistiky
+              Ĺ tatistiky
             </TabsTrigger>
           </TabsList>
         </div>
@@ -110,7 +114,7 @@ export function AdminSection() {
   )
 }
 
-// ─── Admin Orders ───
+// â”€â”€â”€ Admin Orders â”€â”€â”€
 function AdminOrders() {
   const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -137,15 +141,15 @@ function AdminOrders() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       })
-      if (!res.ok) throw new Error('Chyba pri aktualizácii')
+      if (!res.ok) throw new Error('Chyba pri aktualizĂˇcii')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] })
       queryClient.invalidateQueries({ queryKey: ['orders'] })
-      toast.success('Stav objednávky aktualizovaný')
+      toast.success('Stav objednĂˇvky aktualizovanĂ˝')
     },
-    onError: () => toast.error('Chyba pri aktualizácii stavu'),
+    onError: () => toast.error('Chyba pri aktualizĂˇcii stavu'),
   })
 
   const assignCourierMutation = useMutation({
@@ -155,14 +159,14 @@ function AdminOrders() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId, courierId }),
       })
-      if (!res.ok) throw new Error('Chyba pri priraďovaní')
+      if (!res.ok) throw new Error('Chyba pri priraÄŹovanĂ­')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] })
-      toast.success('Kuriér priradený')
+      toast.success('KuriĂ©r priradenĂ˝')
     },
-    onError: () => toast.error('Chyba pri priraďovaní kuriéra'),
+    onError: () => toast.error('Chyba pri priraÄŹovanĂ­ kuriĂ©ra'),
   })
 
   const handleViewDetail = (order: Order) => {
@@ -190,14 +194,14 @@ function AdminOrders() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">Všetky</SelectItem>
+            <SelectItem value="ALL">VĹˇetky</SelectItem>
             {Object.entries(ORDER_STATUS_LABELS).map(([key, label]) => (
               <SelectItem key={key} value={key}>{label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">
-          {orders?.length || 0} objednávok
+          {orders?.length || 0} objednĂˇvok
         </span>
       </div>
 
@@ -207,12 +211,12 @@ function AdminOrders() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Číslo</TableHead>
-                <TableHead>Zákazník</TableHead>
+                <TableHead>ÄŚĂ­slo</TableHead>
+                <TableHead>ZĂˇkaznĂ­k</TableHead>
                 <TableHead>Typ</TableHead>
                 <TableHead>Stav</TableHead>
                 <TableHead>Suma</TableHead>
-                <TableHead>Čas</TableHead>
+                <TableHead>ÄŚas</TableHead>
                 <TableHead>Akcie</TableHead>
               </TableRow>
             </TableHeader>
@@ -223,7 +227,7 @@ function AdminOrders() {
                   <TableCell>{order.customerName}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">
-                      {order.orderType === 'DELIVERY' ? '🚗 Rozvoz' : '📦 Odber'}
+                      {order.orderType === 'DELIVERY' ? 'đźš— Rozvoz' : 'đź“¦ Odber'}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -245,7 +249,7 @@ function AdminOrders() {
               {(!orders || orders.length === 0) && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    Žiadne objednávky
+                    Ĺ˝iadne objednĂˇvky
                   </TableCell>
                 </TableRow>
               )}
@@ -259,9 +263,9 @@ function AdminOrders() {
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle style={{ color: '#4f7f2a' }}>
-              Objednávka {selectedOrder?.orderNumber}
+              ObjednĂˇvka {selectedOrder?.orderNumber}
             </DialogTitle>
-            <DialogDescription>Detail objednávky a akcie</DialogDescription>
+            <DialogDescription>Detail objednĂˇvky a akcie</DialogDescription>
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-4">
@@ -270,7 +274,7 @@ function AdminOrders() {
                   {ORDER_STATUS_LABELS[selectedOrder.status]}
                 </Badge>
                 <Badge variant="outline">
-                  {selectedOrder.orderType === 'DELIVERY' ? 'Rozvoz' : 'Osobný odber'}
+                  {selectedOrder.orderType === 'DELIVERY' ? 'Rozvoz' : 'OsobnĂ˝ odber'}
                 </Badge>
               </div>
 
@@ -285,7 +289,7 @@ function AdminOrders() {
               <Separator />
 
               <div className="space-y-2">
-                <h4 className="font-semibold text-sm">Položky</h4>
+                <h4 className="font-semibold text-sm">PoloĹľky</h4>
                 {selectedOrder.items.map((item) => (
                   <div key={item.id} className="flex justify-between text-sm">
                     <span>{item.quantity}x {item.menuItemNameSnapshot}</span>
@@ -294,12 +298,12 @@ function AdminOrders() {
                 ))}
                 <Separator />
                 <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>Medzisúčet</span>
+                  <span>MedzisĂşÄŤet</span>
                   <span>{formatPrice(selectedOrder.subtotalAmount)}</span>
                 </div>
                 {selectedOrder.deliveryFee > 0 && (
                   <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>Dopravné</span>
+                    <span>DopravnĂ©</span>
                     <span>{formatPrice(selectedOrder.deliveryFee)}</span>
                   </div>
                 )}
@@ -313,7 +317,7 @@ function AdminOrders() {
 
               {/* Status update */}
               <div>
-                <Label className="text-sm font-semibold">Zmeniť stav</Label>
+                <Label className="text-sm font-semibold">ZmeniĹĄ stav</Label>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {(['ACCEPTED', 'IN_KITCHEN', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED'] as OrderStatus[]).map((s) => (
                     <Button
@@ -334,7 +338,7 @@ function AdminOrders() {
                 <div>
                   <Label className="text-sm font-semibold flex items-center gap-1">
                     <Truck className="h-4 w-4" />
-                    Priradiť kuriéra
+                    PriradiĹĄ kuriĂ©ra
                   </Label>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {couriers?.filter(c => c.isActive && c.status !== 'OFFLINE').map((c) => (
@@ -350,7 +354,7 @@ function AdminOrders() {
                       </Button>
                     ))}
                     {couriers?.filter(c => c.isActive && c.status !== 'OFFLINE').length === 0 && (
-                      <p className="text-sm text-muted-foreground">Žiadni dostupní kuriéri</p>
+                      <p className="text-sm text-muted-foreground">Ĺ˝iadni dostupnĂ­ kuriĂ©ri</p>
                     )}
                   </div>
                 </div>
@@ -363,32 +367,150 @@ function AdminOrders() {
   )
 }
 
-// ─── Admin Menu ───
+// â”€â”€â”€ Admin Menu â”€â”€â”€
+type MenuForm = {
+  id?: string
+  categoryId: string
+  slug: string
+  name: string
+  description: string
+  basePrice: string
+  preparationTimeMinutes: string
+  imageUrl: string
+  isActive: boolean
+  isAvailable: boolean
+  isFeatured: boolean
+}
+
+function createSlug(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 function AdminMenu() {
   const queryClient = useQueryClient()
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
+  const [form, setForm] = useState<MenuForm>({
+    categoryId: '',
+    slug: '',
+    name: '',
+    description: '',
+    basePrice: '',
+    preparationTimeMinutes: '15',
+    imageUrl: '',
+    isActive: true,
+    isAvailable: true,
+    isFeatured: false,
+  })
 
   const { data: categories, isLoading } = useQuery<MenuCategory[]>({
     queryKey: ['admin-categories'],
     queryFn: () => authFetch('/api/admin/categories').then(r => r.json()),
   })
 
-  const updateMenuItemMutation = useMutation({
-    mutationFn: async ({ id, ...fields }: { id: string; isActive?: boolean; isAvailable?: boolean }) => {
+  const saveMenuItemMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => {
       const res = await authFetch('/api/admin/menu', {
-        method: 'PUT',
+        method: payload.id ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, ...fields }),
+        body: JSON.stringify(payload),
       })
-      if (!res.ok) throw new Error('Chyba pri aktualizácii')
+      if (!res.ok) throw new Error((await res.json()).error || 'Chyba pri ukladanĂ­')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-categories'] })
       queryClient.invalidateQueries({ queryKey: ['menu'] })
-      toast.success('Položka aktualizovaná')
+      setDialogOpen(false)
+      toast.success('PoloĹľka uloĹľenĂˇ')
     },
-    onError: () => toast.error('Chyba pri aktualizácii'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Chyba pri ukladanĂ­'),
   })
+
+  const deleteMenuItemMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await authFetch('/api/admin/menu', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Chyba pri odoberanĂ­')
+      return res.json()
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-categories'] })
+      queryClient.invalidateQueries({ queryKey: ['menu'] })
+      toast.success(data.deactivated ? 'PoloĹľka bola vypnutĂˇ' : 'PoloĹľka odobratĂˇ')
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Chyba pri odoberanĂ­'),
+  })
+
+  const resetForm = (categoryId = categories?.[0]?.id || '') => {
+    setEditingItem(null)
+    setForm({
+      categoryId,
+      slug: '',
+      name: '',
+      description: '',
+      basePrice: '',
+      preparationTimeMinutes: '15',
+      imageUrl: '',
+      isActive: true,
+      isAvailable: true,
+      isFeatured: false,
+    })
+  }
+
+  const openCreate = (categoryId?: string) => {
+    resetForm(categoryId)
+    setDialogOpen(true)
+  }
+
+  const openEdit = (item: MenuItem) => {
+    setEditingItem(item)
+    setForm({
+      id: item.id,
+      categoryId: item.categoryId,
+      slug: item.slug,
+      name: item.name,
+      description: item.description || '',
+      basePrice: String(item.basePrice),
+      preparationTimeMinutes: String(item.preparationTimeMinutes ?? 15),
+      imageUrl: item.imageUrl || '',
+      isActive: item.isActive,
+      isAvailable: item.isAvailable,
+      isFeatured: item.isFeatured,
+    })
+    setDialogOpen(true)
+  }
+
+  const submitMenuItem = () => {
+    const basePrice = Number(form.basePrice)
+    const preparationTimeMinutes = Number(form.preparationTimeMinutes)
+    if (!form.categoryId || !form.name.trim() || !form.slug.trim() || Number.isNaN(basePrice)) {
+      toast.error('VyplĹte kategĂłriu, nĂˇzov, slug a cenu')
+      return
+    }
+
+    saveMenuItemMutation.mutate({
+      ...(form.id ? { id: form.id } : {}),
+      categoryId: form.categoryId,
+      slug: form.slug.trim(),
+      name: form.name.trim(),
+      description: form.description.trim() || null,
+      basePrice,
+      preparationTimeMinutes: Number.isNaN(preparationTimeMinutes) ? null : preparationTimeMinutes,
+      imageUrl: form.imageUrl.trim() || null,
+      isActive: form.isActive,
+      isAvailable: form.isAvailable,
+      isFeatured: form.isFeatured,
+    })
+  }
 
   if (isLoading) {
     return (
@@ -402,6 +524,17 @@ function AdminMenu() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">Menu poloĹľky</h3>
+          <p className="text-sm text-muted-foreground">PridĂˇvanie, Ăşprava a dostupnosĹĄ jedĂˇl</p>
+        </div>
+        <Button onClick={() => openCreate()} style={{ backgroundColor: '#4f7f2a', color: 'white' }}>
+          <Plus className="h-4 w-4 mr-2" />
+          NovĂˇ poloĹľka
+        </Button>
+      </div>
+
       {categories?.map((cat) => (
         <Card key={cat.id}>
           <CardHeader className="pb-3">
@@ -409,11 +542,11 @@ function AdminMenu() {
               <span>
                 {cat.name}
                 <span className="text-sm font-normal text-muted-foreground ml-2">
-                  ({cat.menuItems.length} položiek)
+                  ({cat.menuItems.length} poloĹľiek)
                 </span>
               </span>
               <Badge variant={cat.isActive ? 'default' : 'secondary'} className={cat.isActive ? 'bg-green-100 text-green-800' : ''}>
-                {cat.isActive ? 'Aktívna' : 'Neaktívna'}
+                {cat.isActive ? 'AktĂ­vna' : 'NeaktĂ­vna'}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -422,7 +555,7 @@ function AdminMenu() {
               {cat.menuItems.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+                  className="flex flex-col gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -433,33 +566,128 @@ function AdminMenu() {
                     </div>
                     <p className="text-xs text-muted-foreground">{formatPrice(item.basePrice)}</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground">Viditeľné</Label>
+                      <Label className="text-xs text-muted-foreground">ViditeÄľnĂ©</Label>
                       <Switch
                         checked={item.isActive}
-                        onCheckedChange={(checked) => updateMenuItemMutation.mutate({ id: item.id, isActive: checked })}
+                        onCheckedChange={(checked) => saveMenuItemMutation.mutate({ id: item.id, isActive: checked })}
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground">Dostupné</Label>
+                      <Label className="text-xs text-muted-foreground">DostupnĂ©</Label>
                       <Switch
                         checked={item.isAvailable}
-                        onCheckedChange={(checked) => updateMenuItemMutation.mutate({ id: item.id, isAvailable: checked })}
+                        onCheckedChange={(checked) => saveMenuItemMutation.mutate({ id: item.id, isAvailable: checked })}
                       />
                     </div>
+                    <Button variant="outline" size="sm" onClick={() => openEdit(item)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-700 hover:text-red-800"
+                      disabled={deleteMenuItemMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm(`OdobraĹĄ poloĹľku "${item.name}"?`)) {
+                          deleteMenuItemMutation.mutate(item.id)
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               ))}
+              <Button variant="outline" size="sm" onClick={() => openCreate(cat.id)}>
+                <Plus className="h-4 w-4 mr-2" />
+                PridaĹĄ do kategĂłrie
+              </Button>
             </div>
           </CardContent>
         </Card>
       ))}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? 'UpraviĹĄ poloĹľku' : 'NovĂˇ poloĹľka'}</DialogTitle>
+            <DialogDescription>VyplĹte Ăşdaje poloĹľky menu.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>KategĂłria</Label>
+              <Select value={form.categoryId} onValueChange={(value) => setForm(prev => ({ ...prev, categoryId: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Vyberte kategĂłriu" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories?.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>NĂˇzov</Label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => {
+                    const name = e.target.value
+                    setForm(prev => ({ ...prev, name, slug: prev.slug || createSlug(name) }))
+                  }}
+                />
+              </div>
+              <div>
+                <Label>Slug</Label>
+                <Input value={form.slug} onChange={(e) => setForm(prev => ({ ...prev, slug: createSlug(e.target.value) }))} />
+              </div>
+            </div>
+            <div>
+              <Label>Popis</Label>
+              <Textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))} rows={3} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Cena</Label>
+                <Input type="number" step="0.01" value={form.basePrice} onChange={(e) => setForm(prev => ({ ...prev, basePrice: e.target.value }))} />
+              </div>
+              <div>
+                <Label>ÄŚas prĂ­pravy (min)</Label>
+                <Input type="number" value={form.preparationTimeMinutes} onChange={(e) => setForm(prev => ({ ...prev, preparationTimeMinutes: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <Label>ObrĂˇzok URL</Label>
+              <Input value={form.imageUrl} onChange={(e) => setForm(prev => ({ ...prev, imageUrl: e.target.value }))} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <Label>ViditeÄľnĂˇ</Label>
+                <Switch checked={form.isActive} onCheckedChange={(value) => setForm(prev => ({ ...prev, isActive: value }))} />
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <Label>DostupnĂˇ</Label>
+                <Switch checked={form.isAvailable} onCheckedChange={(value) => setForm(prev => ({ ...prev, isAvailable: value }))} />
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <Label>Akcia</Label>
+                <Switch checked={form.isFeatured} onCheckedChange={(value) => setForm(prev => ({ ...prev, isFeatured: value }))} />
+              </div>
+            </div>
+            <Button className="w-full" disabled={saveMenuItemMutation.isPending} onClick={submitMenuItem} style={{ backgroundColor: '#4f7f2a', color: 'white' }}>
+              {saveMenuItemMutation.isPending ? 'UkladĂˇm...' : 'UloĹľiĹĄ poloĹľku'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
-// ─── Admin Settings ───
+// â”€â”€â”€ Admin Settings â”€â”€â”€
 function AdminSettings() {
   const queryClient = useQueryClient()
 
@@ -493,14 +721,14 @@ function AdminSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      if (!res.ok) throw new Error('Chyba pri ukladaní')
+      if (!res.ok) throw new Error('Chyba pri ukladanĂ­')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
-      toast.success('Nastavenia uložené')
+      toast.success('Nastavenia uloĹľenĂ©')
     },
-    onError: () => toast.error('Chyba pri ukladaní nastavení'),
+    onError: () => toast.error('Chyba pri ukladanĂ­ nastavenĂ­'),
   })
 
   if (isLoading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
@@ -511,11 +739,11 @@ function AdminSettings() {
       <Card className="p-4 space-y-4">
         <h3 className="font-semibold flex items-center gap-2">
           <Settings className="h-4 w-4" style={{ color: '#4f7f2a' }} />
-          Prevádzka
+          PrevĂˇdzka
         </h3>
 
         <div className="flex items-center justify-between">
-          <Label>Otvorené</Label>
+          <Label>OtvorenĂ©</Label>
           <Switch
             checked={form.isOpen}
             onCheckedChange={(v) => setForm(prev => ({ ...prev, isOpen: v }))}
@@ -523,7 +751,7 @@ function AdminSettings() {
         </div>
 
         <div className="flex items-center justify-between">
-          <Label>Rozvoz povolený</Label>
+          <Label>Rozvoz povolenĂ˝</Label>
           <Switch
             checked={form.deliveryEnabled}
             onCheckedChange={(v) => setForm(prev => ({ ...prev, deliveryEnabled: v }))}
@@ -531,7 +759,7 @@ function AdminSettings() {
         </div>
 
         <div className="flex items-center justify-between">
-          <Label>Osobný odber povolený</Label>
+          <Label>OsobnĂ˝ odber povolenĂ˝</Label>
           <Switch
             checked={form.pickupEnabled}
             onCheckedChange={(v) => setForm(prev => ({ ...prev, pickupEnabled: v }))}
@@ -542,12 +770,12 @@ function AdminSettings() {
       <Card className="p-4 space-y-4">
         <h3 className="font-semibold flex items-center gap-2">
           <MessageSquare className="h-4 w-4" style={{ color: '#4f7f2a' }} />
-          Správa pre zákazníkov
+          SprĂˇva pre zĂˇkaznĂ­kov
         </h3>
         <Textarea
           value={form.customerMessage || ''}
           onChange={(e) => setForm(prev => ({ ...prev, customerMessage: e.target.value }))}
-          placeholder="Např. Vitajte v Pizza Jašterka!"
+          placeholder="NapĹ™. Vitajte v Pizza JaĹˇterka!"
           rows={3}
         />
       </Card>
@@ -555,11 +783,11 @@ function AdminSettings() {
       <Card className="p-4 space-y-4">
         <h3 className="font-semibold flex items-center gap-2">
           <Clock className="h-4 w-4" style={{ color: '#4f7f2a' }} />
-          Čas a objednávky
+          ÄŚas a objednĂˇvky
         </h3>
         <div className="space-y-3">
           <div>
-            <Label>Priemerný čas prípravy (min)</Label>
+            <Label>PriemernĂ˝ ÄŤas prĂ­pravy (min)</Label>
             <Input
               type="number"
               value={form.averagePrepMinutes || ''}
@@ -567,7 +795,7 @@ function AdminSettings() {
             />
           </div>
           <div>
-            <Label>Minimálna suma objednávky (€)</Label>
+            <Label>MinimĂˇlna suma objednĂˇvky (â‚¬)</Label>
             <Input
               type="number"
               step="0.01"
@@ -585,7 +813,7 @@ function AdminSettings() {
         </h3>
         <div className="space-y-3">
           <div>
-            <Label>Telefón</Label>
+            <Label>TelefĂłn</Label>
             <Input
               value={form.storePhone || ''}
               onChange={(e) => setForm(prev => ({ ...prev, storePhone: e.target.value }))}
@@ -597,7 +825,7 @@ function AdminSettings() {
             <Input
               value={form.storeAddress || ''}
               onChange={(e) => setForm(prev => ({ ...prev, storeAddress: e.target.value }))}
-              placeholder="Hlavná 45, 920 01 Hlohovec"
+              placeholder="HlavnĂˇ 45, 920 01 Hlohovec"
             />
           </div>
         </div>
@@ -611,42 +839,161 @@ function AdminSettings() {
         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4f7f2a')}
         onClick={() => updateSettingsMutation.mutate(form)}
       >
-        {updateSettingsMutation.isPending ? 'Ukladám...' : 'Uložiť nastavenia'}
+        {updateSettingsMutation.isPending ? 'UkladĂˇm...' : 'UloĹľiĹĄ nastavenia'}
       </Button>
     </div>
   )
 }
 
-// ─── Admin Couriers ───
+// â”€â”€â”€ Admin Couriers â”€â”€â”€
+type CourierForm = {
+  courierId?: string
+  displayName: string
+  email: string
+  phone: string
+  password: string
+  vehicleType: 'BICYCLE' | 'SCOOTER' | 'CAR'
+  status: string
+  isActive: boolean
+}
+
 function AdminCouriers() {
   const queryClient = useQueryClient()
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingCourier, setEditingCourier] = useState<Courier | null>(null)
+  const [form, setForm] = useState<CourierForm>({
+    displayName: '',
+    email: '',
+    phone: '',
+    password: '',
+    vehicleType: 'CAR',
+    status: 'OFFLINE',
+    isActive: false,
+  })
 
   const { data: couriers, isLoading } = useQuery<Courier[]>({
     queryKey: ['couriers'],
     queryFn: () => authFetch('/api/couriers').then(r => r.json()),
   })
 
-  const updateCourierMutation = useMutation({
-    mutationFn: async ({ courierId, status }: { courierId: string; status: string }) => {
+  const saveCourierMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => {
       const res = await authFetch('/api/couriers', {
-        method: 'PATCH',
+        method: payload.courierId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courierId, status }),
+        body: JSON.stringify(payload),
       })
-      if (!res.ok) throw new Error('Chyba pri aktualizácii')
+      if (!res.ok) throw new Error((await res.json()).error || 'Chyba pri ukladaní')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['couriers'] })
-      toast.success('Stav kuriéra aktualizovaný')
+      setDialogOpen(false)
+      toast.success('Kuriér uložený')
     },
-    onError: () => toast.error('Chyba pri aktualizácii'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Chyba pri ukladaní'),
   })
+
+  const deleteCourierMutation = useMutation({
+    mutationFn: async (courierId: string) => {
+      const res = await authFetch('/api/couriers', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courierId }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Chyba pri odoberaní')
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['couriers'] })
+      toast.success('Kuriér deaktivovaný')
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Chyba pri odoberaní'),
+  })
+
+  const openCreate = () => {
+    setEditingCourier(null)
+    setForm({
+      displayName: '',
+      email: '',
+      phone: '',
+      password: '',
+      vehicleType: 'CAR',
+      status: 'OFFLINE',
+      isActive: false,
+    })
+    setDialogOpen(true)
+  }
+
+  const openEdit = (courier: Courier) => {
+    setEditingCourier(courier)
+    setForm({
+      courierId: courier.id,
+      displayName: courier.displayName,
+      email: courier.user?.email || '',
+      phone: courier.user?.phone || courier.phone || '',
+      password: '',
+      vehicleType: courier.vehicleType,
+      status: courier.status,
+      isActive: courier.isActive,
+    })
+    setDialogOpen(true)
+  }
+
+  const submitCourier = () => {
+    if (!form.displayName.trim()) {
+      toast.error('Vyplňte meno kuriéra')
+      return
+    }
+    if (!form.email.trim() && !form.phone.trim()) {
+      toast.error('Vyplňte email alebo telefón')
+      return
+    }
+    if (!form.courierId && form.password.length < 6) {
+      toast.error('Heslo musí mať aspoň 6 znakov')
+      return
+    }
+
+    saveCourierMutation.mutate({
+      ...(form.courierId ? { courierId: form.courierId } : {}),
+      displayName: form.displayName.trim(),
+      email: form.email.trim() || null,
+      phone: form.phone.trim() || null,
+      ...(form.password ? { password: form.password } : {}),
+      vehicleType: form.vehicleType,
+      status: form.status,
+      isActive: form.isActive,
+    })
+  }
+
+  const updateCourier = (courier: Courier, fields: Record<string, unknown>) => {
+    saveCourierMutation.mutate({
+      courierId: courier.id,
+      displayName: courier.displayName,
+      email: courier.user?.email || null,
+      phone: courier.user?.phone || courier.phone || null,
+      vehicleType: courier.vehicleType,
+      status: courier.status,
+      isActive: courier.isActive,
+      ...fields,
+    })
+  }
 
   if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">Kuriéri</h3>
+          <p className="text-sm text-muted-foreground">Účty, schvaľovanie a dostupnosť kuriérov</p>
+        </div>
+        <Button onClick={openCreate} style={{ backgroundColor: '#4f7f2a', color: 'white' }}>
+          <Plus className="h-4 w-4 mr-2" />
+          Nový kuriér
+        </Button>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         {couriers?.map((courier) => (
           <Card key={courier.id} className="p-4">
@@ -654,6 +1001,12 @@ function AdminCouriers() {
               <div>
                 <h4 className="font-semibold">{courier.displayName}</h4>
                 <div className="text-sm text-muted-foreground space-y-0.5 mt-1">
+                  {courier.user?.email && (
+                    <div className="flex items-center gap-1">
+                      <Mail className="h-3 w-3" />
+                      {courier.user.email}
+                    </div>
+                  )}
                   {courier.phone && (
                     <div className="flex items-center gap-1">
                       <Phone className="h-3 w-3" />
@@ -666,27 +1019,35 @@ function AdminCouriers() {
                   </div>
                 </div>
               </div>
-              <Badge className={
-                courier.status === 'AVAILABLE' ? 'bg-green-100 text-green-800' :
-                courier.status === 'OFFLINE' ? 'bg-gray-100 text-gray-800' :
-                courier.status === 'DELIVERING' ? 'bg-blue-100 text-blue-800' :
-                'bg-yellow-100 text-yellow-800'
-              }>
-                {COURIER_STATUS_LABELS[courier.status] || courier.status}
-              </Badge>
+              <div className="flex flex-col items-end gap-2">
+                {!courier.isActive && <Badge variant="secondary">Čaká na schválenie</Badge>}
+                <Badge className={
+                  courier.status === 'AVAILABLE' ? 'bg-green-100 text-green-800' :
+                  courier.status === 'OFFLINE' ? 'bg-gray-100 text-gray-800' :
+                  courier.status === 'DELIVERING' ? 'bg-blue-100 text-blue-800' :
+                  'bg-yellow-100 text-yellow-800'
+                }>
+                  {COURIER_STATUS_LABELS[courier.status] || courier.status}
+                </Badge>
+              </div>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <Label className="text-xs">Aktívny</Label>
+                <Label className="text-xs">{courier.isActive ? 'Aktívny' : 'Neaktívny'}</Label>
                 <Switch
                   checked={courier.isActive}
-                  disabled
+                  disabled={saveCourierMutation.isPending}
+                  onCheckedChange={(checked) => updateCourier(courier, {
+                    isActive: checked,
+                    status: checked && courier.status === 'OFFLINE' ? 'AVAILABLE' : courier.status,
+                  })}
                 />
               </div>
               <Select
                 value={courier.status}
-                onValueChange={(val) => updateCourierMutation.mutate({ courierId: courier.id, status: val })}
+                onValueChange={(val) => updateCourier(courier, { status: val })}
+                disabled={!courier.isActive || saveCourierMutation.isPending}
               >
                 <SelectTrigger className="w-32">
                   <SelectValue />
@@ -699,6 +1060,33 @@ function AdminCouriers() {
               </Select>
             </div>
 
+            <div className="mt-3 flex gap-2 flex-wrap">
+              {!courier.isActive && (
+                <Button size="sm" onClick={() => updateCourier(courier, { isActive: true, status: 'AVAILABLE' })}>
+                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  Schváliť
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => openEdit(courier)}>
+                <Pencil className="h-4 w-4 mr-1" />
+                Upraviť
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-red-700 hover:text-red-800"
+                disabled={deleteCourierMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`Deaktivovať kuriéra "${courier.displayName}"?`)) {
+                    deleteCourierMutation.mutate(courier.id)
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Odobrať
+              </Button>
+            </div>
+
             {courier.activeOrderCount > 0 && (
               <div className="mt-2 text-xs text-muted-foreground">
                 Aktívne objednávky: {courier.activeOrderCount}
@@ -707,10 +1095,73 @@ function AdminCouriers() {
           </Card>
         ))}
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingCourier ? 'Upraviť kuriéra' : 'Nový kuriér'}</DialogTitle>
+            <DialogDescription>Kuriér sa prihlási emailom alebo telefónom a heslom.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Meno kuriéra</Label>
+              <Input value={form.displayName} onChange={(e) => setForm(prev => ({ ...prev, displayName: e.target.value }))} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Email</Label>
+                <Input type="email" value={form.email} onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Telefón</Label>
+                <Input value={form.phone} onChange={(e) => setForm(prev => ({ ...prev, phone: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <Label>{editingCourier ? 'Nové heslo (voliteľné)' : 'Heslo'}</Label>
+              <Input type="password" value={form.password} onChange={(e) => setForm(prev => ({ ...prev, password: e.target.value }))} autoComplete="new-password" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Vozidlo</Label>
+                <Select value={form.vehicleType} onValueChange={(value) => setForm(prev => ({ ...prev, vehicleType: value as CourierForm['vehicleType'] }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BICYCLE">Bicykel</SelectItem>
+                    <SelectItem value="SCOOTER">Skúter</SelectItem>
+                    <SelectItem value="CAR">Auto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Stav</Label>
+                <Select value={form.status} onValueChange={(value) => setForm(prev => ({ ...prev, status: value }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="OFFLINE">Offline</SelectItem>
+                    <SelectItem value="AVAILABLE">Dostupný</SelectItem>
+                    <SelectItem value="BREAK">Pauza</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <Label>Schválený a aktívny</Label>
+              <Switch checked={form.isActive} onCheckedChange={(value) => setForm(prev => ({ ...prev, isActive: value, status: value && prev.status === 'OFFLINE' ? 'AVAILABLE' : prev.status }))} />
+            </div>
+            <Button className="w-full" disabled={saveCourierMutation.isPending} onClick={submitCourier} style={{ backgroundColor: '#4f7f2a', color: 'white' }}>
+              {saveCourierMutation.isPending ? 'Ukladám...' : 'Uložiť kuriéra'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-
 // ─── Admin Stats ───
 function AdminStats() {
   const { data: stats, isLoading } = useQuery({
@@ -730,7 +1181,7 @@ function AdminStats() {
               <ShoppingBag className="h-5 w-5" style={{ color: '#4f7f2a' }} />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Dnešné objednávky</p>
+              <p className="text-sm text-muted-foreground">DneĹˇnĂ© objednĂˇvky</p>
               <p className="text-2xl font-bold">{stats?.todaysOrderCount || 0}</p>
             </div>
           </div>
@@ -741,7 +1192,7 @@ function AdminStats() {
               <DollarSign className="h-5 w-5" style={{ color: '#c73325' }} />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Dnešný obrat</p>
+              <p className="text-sm text-muted-foreground">DneĹˇnĂ˝ obrat</p>
               <p className="text-2xl font-bold" style={{ color: '#4f7f2a' }}>
                 {formatPrice(stats?.todaysRevenue || 0)}
               </p>
@@ -754,7 +1205,7 @@ function AdminStats() {
               <TrendingUp className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Celkom objednávok</p>
+              <p className="text-sm text-muted-foreground">Celkom objednĂˇvok</p>
               <p className="text-2xl font-bold">
                 {Object.values(stats?.orderCountsByStatus || {}).reduce((a: number, b: unknown) => a + Number(b), 0) as number}
               </p>
@@ -767,7 +1218,7 @@ function AdminStats() {
       <Card className="p-4">
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <BarChart3 className="h-4 w-4" style={{ color: '#4f7f2a' }} />
-          Objednávky podľa stavu
+          ObjednĂˇvky podÄľa stavu
         </h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Object.entries(ORDER_STATUS_LABELS).map(([status, label]) => {
@@ -786,3 +1237,4 @@ function AdminStats() {
     </div>
   )
 }
+
