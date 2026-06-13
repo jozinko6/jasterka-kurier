@@ -53,6 +53,33 @@ async function requestAllowingStatus(path, expectedStatus, options = {}) {
   )
 }
 
+async function requestExpectingStatus(path, expectedStatus, options = {}) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+  })
+
+  let data = null
+  const text = await response.text()
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      data = text
+    }
+  }
+
+  assert(
+    response.status === expectedStatus,
+    `${options.method || 'GET'} ${path} expected ${expectedStatus}, got ${response.status}: ${JSON.stringify(data)}`
+  )
+
+  return data
+}
+
 async function login(userKey) {
   const auth = await request('/api/auth', {
     method: 'POST',
@@ -149,6 +176,16 @@ async function main() {
   const availableCourier = couriers.find((item) => item.isActive && item.status !== 'OFFLINE') || couriers[0]
   assert(availableCourier?.id, 'No courier available for assignment test')
 
+  await requestExpectingStatus('/api/dispatch', 403, {
+    method: 'POST',
+    headers: kitchen.headers,
+    body: JSON.stringify({
+      orderId: createdOrder.id,
+      courierId: availableCourier.id,
+    }),
+  })
+  console.log('✓ kitchen cannot dispatch orders')
+
   const assignment = await request('/api/dispatch', {
     method: 'POST',
     headers: admin.headers,
@@ -159,6 +196,16 @@ async function main() {
   })
   assert(assignment.id, 'Dispatch did not return an assignment id')
   console.log(`✓ admin assigned order to courier ${availableCourier.displayName}`)
+
+  await requestExpectingStatus('/api/dispatch', 409, {
+    method: 'POST',
+    headers: admin.headers,
+    body: JSON.stringify({
+      orderId: createdOrder.id,
+      courierId: availableCourier.id,
+    }),
+  })
+  console.log('✓ duplicate courier assignment is rejected')
 
   const assignedOrders = await request('/api/orders?status=ASSIGNED_TO_COURIER', { headers: courier.headers })
   assert(

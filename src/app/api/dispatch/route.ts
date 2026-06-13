@@ -41,6 +41,17 @@ export async function POST(request: NextRequest) {
         throw new Error('COURIER_NOT_FOUND')
       }
 
+      const existingAssignment = await tx.deliveryAssignment.findFirst({
+        where: {
+          orderId: data.orderId,
+          status: { in: ['PENDING', 'ASSIGNED', 'ACCEPTED', 'PICKED_UP'] },
+        },
+      })
+
+      if (existingAssignment) {
+        throw new Error('ORDER_ALREADY_ASSIGNED')
+      }
+
       // Create assignment
       const assignment = await tx.deliveryAssignment.create({
         data: {
@@ -90,6 +101,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Kuriér nenájdený alebo neaktívny' },
         { status: 404 }
+      )
+    }
+    if (error instanceof Error && error.message === 'ORDER_ALREADY_ASSIGNED') {
+      return NextResponse.json(
+        { error: 'Objednavka uz ma aktivne priradenie kuriera' },
+        { status: 409 }
       )
     }
     console.error('Error assigning courier:', error)
