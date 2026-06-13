@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { AdminSection } from '@/components/jasterka/AdminSection'
 import { LoginForm } from '@/components/jasterka/LoginForm'
@@ -7,7 +8,19 @@ import { Shield, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export default function AdminPage() {
-  const { isAuthenticated, user, logout } = useAuthStore()
+  const { isAuthenticated, isRestoring, user, logout, restore } = useAuthStore()
+
+  useEffect(() => {
+    restore()
+  }, [restore])
+
+  if (isRestoring) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+        Overujem prihlasenie...
+      </div>
+    )
+  }
 
   if (!isAuthenticated) {
     return (

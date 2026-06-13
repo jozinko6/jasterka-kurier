@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { KitchenSection } from '@/components/jasterka/KitchenSection'
 import { LoginForm } from '@/components/jasterka/LoginForm'
@@ -10,7 +11,19 @@ import { Button } from '@/components/ui/button'
 
 export default function KitchenPage() {
   useServiceWorker('/sw-kuchyna.js')
-  const { isAuthenticated, user, logout } = useAuthStore()
+  const { isAuthenticated, isRestoring, user, logout, restore } = useAuthStore()
+
+  useEffect(() => {
+    restore()
+  }, [restore])
+
+  if (isRestoring) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-gray-400" style={{ backgroundColor: '#1a1a1a' }}>
+        Overujem prihlasenie...
+      </div>
+    )
+  }
 
   if (!isAuthenticated) {
     return (

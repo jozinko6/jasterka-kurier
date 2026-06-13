@@ -59,9 +59,8 @@ export async function POST(request: NextRequest) {
     // Create session token
     const token = await createSession(user.id, user.role)
 
-    // Return user info with token
+    // Return user info. The session token is stored in an httpOnly cookie.
     const result = {
-      token,
       user: {
         id: user.id,
         email: user.email,

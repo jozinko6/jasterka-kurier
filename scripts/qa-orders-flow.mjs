@@ -81,16 +81,25 @@ async function requestExpectingStatus(path, expectedStatus, options = {}) {
 }
 
 async function login(userKey) {
-  const auth = await request('/api/auth', {
+  const response = await fetch(`${BASE_URL}/api/auth`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(USERS[userKey]),
   })
 
-  assert(auth.token, `${userKey} login did not return a token`)
+  const auth = await response.json()
+  if (!response.ok) {
+    throw new Error(`Login ${userKey} failed: ${response.status} ${JSON.stringify(auth)}`)
+  }
+
+  const setCookie = response.headers.get('set-cookie')
+  assert(setCookie, `${userKey} login did not return a session cookie`)
   assert(auth.user?.role, `${userKey} login did not return a user role`)
+  const sessionCookie = setCookie.split(';')[0]
+
   return {
-    token: auth.token,
-    headers: { Authorization: `Bearer ${auth.token}` },
+    cookie: sessionCookie,
+    headers: { Cookie: sessionCookie },
     user: auth.user,
   }
 }

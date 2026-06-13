@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 
 export interface AuthUser {
   id: string
@@ -10,84 +9,86 @@ export interface AuthUser {
 }
 
 interface AuthState {
-  token: string | null
   user: AuthUser | null
   isAuthenticated: boolean
+  isRestoring: boolean
   login: (email: string, password: string) => Promise<AuthUser>
   logout: () => Promise<void>
-  setAuth: (token: string, user: AuthUser) => void
+  restore: () => Promise<AuthUser | null>
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      token: null,
-      user: null,
-      isAuthenticated: false,
+export const useAuthStore = create<AuthState>()((set) => ({
+  user: null,
+  isAuthenticated: false,
+  isRestoring: false,
 
-      login: async (email: string, password: string) => {
-        const res = await fetch('/api/auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        })
+  login: async (email: string, password: string) => {
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password }),
+    })
 
-        if (!res.ok) {
-          const data = await res.json()
-          throw new Error(data.error || 'Prihlásenie zlyhalo')
-        }
-
-        const data = await res.json()
-        set({
-          token: data.token,
-          user: data.user,
-          isAuthenticated: true,
-        })
-
-        return data.user as AuthUser
-      },
-
-      logout: async () => {
-        const { token } = get()
-        if (token) {
-          try {
-            await fetch('/api/auth', {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            })
-          } catch {
-            // Ignore logout API errors
-          }
-        }
-        set({ token: null, user: null, isAuthenticated: false })
-      },
-
-      setAuth: (token: string, user: AuthUser) => {
-        set({ token, user, isAuthenticated: true })
-      },
-    }),
-    {
-      name: 'jasterka-auth',
-      partialize: (state) => ({
-        token: state.token,
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
-      }),
+    if (!res.ok) {
+      const data = await res.json()
+      throw new Error(data.error || 'Prihlasenie zlyhalo')
     }
-  )
-)
+
+    const data = await res.json()
+    set({
+      user: data.user,
+      isAuthenticated: true,
+    })
+
+    return data.user as AuthUser
+  },
+
+  logout: async () => {
+    try {
+      await fetch('/api/auth', {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+    } catch {
+      // Ignore logout API errors.
+    }
+    set({ user: null, isAuthenticated: false })
+  },
+
+  restore: async () => {
+    set({ isRestoring: true })
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'GET',
+        credentials: 'include',
+      })
+
+      if (!res.ok) {
+        set({ user: null, isAuthenticated: false, isRestoring: false })
+        return null
+      }
+
+      const data = await res.json()
+      set({
+        user: data.user,
+        isAuthenticated: true,
+        isRestoring: false,
+      })
+      return data.user as AuthUser
+    } catch {
+      set({ user: null, isAuthenticated: false, isRestoring: false })
+      return null
+    }
+  },
+}))
 
 /**
- * Authenticated fetch wrapper that adds the Authorization header.
- * Use this for all protected API calls.
+ * Authenticated fetch wrapper. Browser requests rely on the httpOnly session
+ * cookie; QA/API scripts can still send Authorization headers directly.
  */
 export function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const { token } = useAuthStore.getState()
   const headers = new Headers(options.headers || {})
-
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
 
   if (!headers.has('Content-Type') && options.body && typeof options.body === 'string') {
     headers.set('Content-Type', 'application/json')
@@ -95,6 +96,7 @@ export function authFetch(url: string, options: RequestInit = {}): Promise<Respo
 
   return fetch(url, {
     ...options,
+    credentials: options.credentials || 'include',
     headers,
   })
 }
