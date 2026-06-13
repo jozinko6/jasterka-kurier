@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -62,8 +62,8 @@ export function AdminSection() {
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b">
-        <h2 className="text-xl font-bold" style={{ color: '#4f7f2a' }}>AdministrĂˇcia</h2>
-        <p className="text-sm text-muted-foreground">SprĂˇva objednĂˇvok, menu a nastavenĂ­</p>
+        <h2 className="text-xl font-bold" style={{ color: '#4f7f2a' }}>Administrácia</h2>
+        <p className="text-sm text-muted-foreground">Správa objednávok, menu a nastavení</p>
       </div>
 
       <Tabs defaultValue="orders" className="flex-1 flex flex-col">
@@ -71,7 +71,7 @@ export function AdminSection() {
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-transparent p-0">
             <TabsTrigger value="orders" className="rounded-md data-[state=active]:bg-[#4f7f2a] data-[state=active]:text-white data-[state=active]:shadow-sm text-sm px-3 py-2">
               <ClipboardList className="h-4 w-4 mr-1" />
-              ObjednĂˇvky
+              Objednávky
             </TabsTrigger>
             <TabsTrigger value="menu" className="rounded-md data-[state=active]:bg-[#4f7f2a] data-[state=active]:text-white data-[state=active]:shadow-sm text-sm px-3 py-2">
               <UtensilsCrossed className="h-4 w-4 mr-1" />
@@ -83,11 +83,11 @@ export function AdminSection() {
             </TabsTrigger>
             <TabsTrigger value="couriers" className="rounded-md data-[state=active]:bg-[#4f7f2a] data-[state=active]:text-white data-[state=active]:shadow-sm text-sm px-3 py-2">
               <Users className="h-4 w-4 mr-1" />
-              KuriĂ©ri
+              Kuriéri
             </TabsTrigger>
             <TabsTrigger value="stats" className="rounded-md data-[state=active]:bg-[#4f7f2a] data-[state=active]:text-white data-[state=active]:shadow-sm text-sm px-3 py-2">
               <BarChart3 className="h-4 w-4 mr-1" />
-              Ĺ tatistiky
+              Štatistiky
             </TabsTrigger>
           </TabsList>
         </div>
@@ -114,7 +114,7 @@ export function AdminSection() {
   )
 }
 
-// â”€â”€â”€ Admin Orders â”€â”€â”€
+// ─── Admin Orders ───
 function AdminOrders() {
   const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -141,15 +141,15 @@ function AdminOrders() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       })
-      if (!res.ok) throw new Error('Chyba pri aktualizĂˇcii')
+      if (!res.ok) throw new Error('Chyba pri aktualizácii')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] })
       queryClient.invalidateQueries({ queryKey: ['orders'] })
-      toast.success('Stav objednĂˇvky aktualizovanĂ˝')
+      toast.success('Stav objednávky aktualizovaný')
     },
-    onError: () => toast.error('Chyba pri aktualizĂˇcii stavu'),
+    onError: () => toast.error('Chyba pri aktualizácii stavu'),
   })
 
   const assignCourierMutation = useMutation({
@@ -159,14 +159,14 @@ function AdminOrders() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId, courierId }),
       })
-      if (!res.ok) throw new Error('Chyba pri priraÄŹovanĂ­')
+      if (!res.ok) throw new Error('Chyba pri priraďovaní')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] })
-      toast.success('KuriĂ©r priradenĂ˝')
+      toast.success('Kuriér priradený')
     },
-    onError: () => toast.error('Chyba pri priraÄŹovanĂ­ kuriĂ©ra'),
+    onError: () => toast.error('Chyba pri priraďovaní kuriéra'),
   })
 
   const handleViewDetail = (order: Order) => {
@@ -194,14 +194,14 @@ function AdminOrders() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">VĹˇetky</SelectItem>
+            <SelectItem value="ALL">Všetky</SelectItem>
             {Object.entries(ORDER_STATUS_LABELS).map(([key, label]) => (
               <SelectItem key={key} value={key}>{label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">
-          {orders?.length || 0} objednĂˇvok
+          {orders?.length || 0} objednávok
         </span>
       </div>
 
@@ -211,12 +211,12 @@ function AdminOrders() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ÄŚĂ­slo</TableHead>
-                <TableHead>ZĂˇkaznĂ­k</TableHead>
+                <TableHead>Číslo</TableHead>
+                <TableHead>Zákazník</TableHead>
                 <TableHead>Typ</TableHead>
                 <TableHead>Stav</TableHead>
                 <TableHead>Suma</TableHead>
-                <TableHead>ÄŚas</TableHead>
+                <TableHead>Čas</TableHead>
                 <TableHead>Akcie</TableHead>
               </TableRow>
             </TableHeader>
@@ -227,7 +227,7 @@ function AdminOrders() {
                   <TableCell>{order.customerName}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">
-                      {order.orderType === 'DELIVERY' ? 'đźš— Rozvoz' : 'đź“¦ Odber'}
+                      {order.orderType === 'DELIVERY' ? '🚗 Rozvoz' : '📦 Odber'}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -249,7 +249,7 @@ function AdminOrders() {
               {(!orders || orders.length === 0) && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    Ĺ˝iadne objednĂˇvky
+                    Žiadne objednávky
                   </TableCell>
                 </TableRow>
               )}
@@ -263,9 +263,9 @@ function AdminOrders() {
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle style={{ color: '#4f7f2a' }}>
-              ObjednĂˇvka {selectedOrder?.orderNumber}
+              Objednávka {selectedOrder?.orderNumber}
             </DialogTitle>
-            <DialogDescription>Detail objednĂˇvky a akcie</DialogDescription>
+            <DialogDescription>Detail objednávky a akcie</DialogDescription>
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-4">
@@ -274,7 +274,7 @@ function AdminOrders() {
                   {ORDER_STATUS_LABELS[selectedOrder.status]}
                 </Badge>
                 <Badge variant="outline">
-                  {selectedOrder.orderType === 'DELIVERY' ? 'Rozvoz' : 'OsobnĂ˝ odber'}
+                  {selectedOrder.orderType === 'DELIVERY' ? 'Rozvoz' : 'Osobný odber'}
                 </Badge>
               </div>
 
@@ -289,7 +289,7 @@ function AdminOrders() {
               <Separator />
 
               <div className="space-y-2">
-                <h4 className="font-semibold text-sm">PoloĹľky</h4>
+                <h4 className="font-semibold text-sm">Položky</h4>
                 {selectedOrder.items.map((item) => (
                   <div key={item.id} className="flex justify-between text-sm">
                     <span>{item.quantity}x {item.menuItemNameSnapshot}</span>
@@ -298,12 +298,12 @@ function AdminOrders() {
                 ))}
                 <Separator />
                 <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>MedzisĂşÄŤet</span>
+                  <span>Medzisúčet</span>
                   <span>{formatPrice(selectedOrder.subtotalAmount)}</span>
                 </div>
                 {selectedOrder.deliveryFee > 0 && (
                   <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>DopravnĂ©</span>
+                    <span>Dopravné</span>
                     <span>{formatPrice(selectedOrder.deliveryFee)}</span>
                   </div>
                 )}
@@ -317,7 +317,7 @@ function AdminOrders() {
 
               {/* Status update */}
               <div>
-                <Label className="text-sm font-semibold">ZmeniĹĄ stav</Label>
+                <Label className="text-sm font-semibold">Zmeniť stav</Label>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {(['ACCEPTED', 'IN_KITCHEN', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED'] as OrderStatus[]).map((s) => (
                     <Button
@@ -338,7 +338,7 @@ function AdminOrders() {
                 <div>
                   <Label className="text-sm font-semibold flex items-center gap-1">
                     <Truck className="h-4 w-4" />
-                    PriradiĹĄ kuriĂ©ra
+                    Priradiť kuriéra
                   </Label>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {couriers?.filter(c => c.isActive && c.status !== 'OFFLINE').map((c) => (
@@ -354,7 +354,7 @@ function AdminOrders() {
                       </Button>
                     ))}
                     {couriers?.filter(c => c.isActive && c.status !== 'OFFLINE').length === 0 && (
-                      <p className="text-sm text-muted-foreground">Ĺ˝iadni dostupnĂ­ kuriĂ©ri</p>
+                      <p className="text-sm text-muted-foreground">Žiadni dostupní kuriéri</p>
                     )}
                   </div>
                 </div>
@@ -367,7 +367,7 @@ function AdminOrders() {
   )
 }
 
-// â”€â”€â”€ Admin Menu â”€â”€â”€
+// ─── Admin Menu ───
 type MenuForm = {
   id?: string
   categoryId: string
@@ -420,16 +420,16 @@ function AdminMenu() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      if (!res.ok) throw new Error((await res.json()).error || 'Chyba pri ukladanĂ­')
+      if (!res.ok) throw new Error((await res.json()).error || 'Chyba pri ukladaní')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-categories'] })
       queryClient.invalidateQueries({ queryKey: ['menu'] })
       setDialogOpen(false)
-      toast.success('PoloĹľka uloĹľenĂˇ')
+      toast.success('Položka uložená')
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Chyba pri ukladanĂ­'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Chyba pri ukladaní'),
   })
 
   const deleteMenuItemMutation = useMutation({
@@ -439,15 +439,15 @@ function AdminMenu() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       })
-      if (!res.ok) throw new Error((await res.json()).error || 'Chyba pri odoberanĂ­')
+      if (!res.ok) throw new Error((await res.json()).error || 'Chyba pri odoberaní')
       return res.json()
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-categories'] })
       queryClient.invalidateQueries({ queryKey: ['menu'] })
-      toast.success(data.deactivated ? 'PoloĹľka bola vypnutĂˇ' : 'PoloĹľka odobratĂˇ')
+      toast.success(data.deactivated ? 'Položka bola vypnutá' : 'Položka odobratá')
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Chyba pri odoberanĂ­'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Chyba pri odoberaní'),
   })
 
   const resetForm = (categoryId = categories?.[0]?.id || '') => {
@@ -493,7 +493,7 @@ function AdminMenu() {
     const basePrice = Number(form.basePrice)
     const preparationTimeMinutes = Number(form.preparationTimeMinutes)
     if (!form.categoryId || !form.name.trim() || !form.slug.trim() || Number.isNaN(basePrice)) {
-      toast.error('VyplĹte kategĂłriu, nĂˇzov, slug a cenu')
+      toast.error('Vyplňte kategóriu, názov, slug a cenu')
       return
     }
 
@@ -526,12 +526,12 @@ function AdminMenu() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Menu poloĹľky</h3>
-          <p className="text-sm text-muted-foreground">PridĂˇvanie, Ăşprava a dostupnosĹĄ jedĂˇl</p>
+          <h3 className="font-semibold">Menu položky</h3>
+          <p className="text-sm text-muted-foreground">Pridávanie, úprava a dostupnosť jedál</p>
         </div>
         <Button onClick={() => openCreate()} style={{ backgroundColor: '#4f7f2a', color: 'white' }}>
           <Plus className="h-4 w-4 mr-2" />
-          NovĂˇ poloĹľka
+          Nová položka
         </Button>
       </div>
 
@@ -542,11 +542,11 @@ function AdminMenu() {
               <span>
                 {cat.name}
                 <span className="text-sm font-normal text-muted-foreground ml-2">
-                  ({cat.menuItems.length} poloĹľiek)
+                  ({cat.menuItems.length} položiek)
                 </span>
               </span>
               <Badge variant={cat.isActive ? 'default' : 'secondary'} className={cat.isActive ? 'bg-green-100 text-green-800' : ''}>
-                {cat.isActive ? 'AktĂ­vna' : 'NeaktĂ­vna'}
+                {cat.isActive ? 'Aktívna' : 'Neaktívna'}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -568,14 +568,14 @@ function AdminMenu() {
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground">ViditeÄľnĂ©</Label>
+                      <Label className="text-xs text-muted-foreground">Viditeľné</Label>
                       <Switch
                         checked={item.isActive}
                         onCheckedChange={(checked) => saveMenuItemMutation.mutate({ id: item.id, isActive: checked })}
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground">DostupnĂ©</Label>
+                      <Label className="text-xs text-muted-foreground">Dostupné</Label>
                       <Switch
                         checked={item.isAvailable}
                         onCheckedChange={(checked) => saveMenuItemMutation.mutate({ id: item.id, isAvailable: checked })}
@@ -590,7 +590,7 @@ function AdminMenu() {
                       className="text-red-700 hover:text-red-800"
                       disabled={deleteMenuItemMutation.isPending}
                       onClick={() => {
-                        if (window.confirm(`OdobraĹĄ poloĹľku "${item.name}"?`)) {
+                        if (window.confirm(`Odobrať položku "${item.name}"?`)) {
                           deleteMenuItemMutation.mutate(item.id)
                         }
                       }}
@@ -602,7 +602,7 @@ function AdminMenu() {
               ))}
               <Button variant="outline" size="sm" onClick={() => openCreate(cat.id)}>
                 <Plus className="h-4 w-4 mr-2" />
-                PridaĹĄ do kategĂłrie
+                Pridať do kategórie
               </Button>
             </div>
           </CardContent>
@@ -612,15 +612,15 @@ function AdminMenu() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingItem ? 'UpraviĹĄ poloĹľku' : 'NovĂˇ poloĹľka'}</DialogTitle>
-            <DialogDescription>VyplĹte Ăşdaje poloĹľky menu.</DialogDescription>
+            <DialogTitle>{editingItem ? 'Upraviť položku' : 'Nová položka'}</DialogTitle>
+            <DialogDescription>Vyplňte údaje položky menu.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>KategĂłria</Label>
+              <Label>Kategória</Label>
               <Select value={form.categoryId} onValueChange={(value) => setForm(prev => ({ ...prev, categoryId: value }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Vyberte kategĂłriu" />
+                  <SelectValue placeholder="Vyberte kategóriu" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories?.map((cat) => (
@@ -631,7 +631,7 @@ function AdminMenu() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <Label>NĂˇzov</Label>
+                <Label>Názov</Label>
                 <Input
                   value={form.name}
                   onChange={(e) => {
@@ -655,21 +655,21 @@ function AdminMenu() {
                 <Input type="number" step="0.01" value={form.basePrice} onChange={(e) => setForm(prev => ({ ...prev, basePrice: e.target.value }))} />
               </div>
               <div>
-                <Label>ÄŚas prĂ­pravy (min)</Label>
+                <Label>Čas prípravy (min)</Label>
                 <Input type="number" value={form.preparationTimeMinutes} onChange={(e) => setForm(prev => ({ ...prev, preparationTimeMinutes: e.target.value }))} />
               </div>
             </div>
             <div>
-              <Label>ObrĂˇzok URL</Label>
+              <Label>Obrázok URL</Label>
               <Input value={form.imageUrl} onChange={(e) => setForm(prev => ({ ...prev, imageUrl: e.target.value }))} />
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="flex items-center justify-between rounded-md border p-3">
-                <Label>ViditeÄľnĂˇ</Label>
+                <Label>Viditeľná</Label>
                 <Switch checked={form.isActive} onCheckedChange={(value) => setForm(prev => ({ ...prev, isActive: value }))} />
               </div>
               <div className="flex items-center justify-between rounded-md border p-3">
-                <Label>DostupnĂˇ</Label>
+                <Label>Dostupná</Label>
                 <Switch checked={form.isAvailable} onCheckedChange={(value) => setForm(prev => ({ ...prev, isAvailable: value }))} />
               </div>
               <div className="flex items-center justify-between rounded-md border p-3">
@@ -678,7 +678,7 @@ function AdminMenu() {
               </div>
             </div>
             <Button className="w-full" disabled={saveMenuItemMutation.isPending} onClick={submitMenuItem} style={{ backgroundColor: '#4f7f2a', color: 'white' }}>
-              {saveMenuItemMutation.isPending ? 'UkladĂˇm...' : 'UloĹľiĹĄ poloĹľku'}
+              {saveMenuItemMutation.isPending ? 'Ukladám...' : 'Uložiť položku'}
             </Button>
           </div>
         </DialogContent>
@@ -687,7 +687,7 @@ function AdminMenu() {
   )
 }
 
-// â”€â”€â”€ Admin Settings â”€â”€â”€
+// ─── Admin Settings ───
 function AdminSettings() {
   const queryClient = useQueryClient()
 
@@ -721,14 +721,14 @@ function AdminSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      if (!res.ok) throw new Error('Chyba pri ukladanĂ­')
+      if (!res.ok) throw new Error('Chyba pri ukladaní')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
-      toast.success('Nastavenia uloĹľenĂ©')
+      toast.success('Nastavenia uložené')
     },
-    onError: () => toast.error('Chyba pri ukladanĂ­ nastavenĂ­'),
+    onError: () => toast.error('Chyba pri ukladaní nastavení'),
   })
 
   if (isLoading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
@@ -739,11 +739,11 @@ function AdminSettings() {
       <Card className="p-4 space-y-4">
         <h3 className="font-semibold flex items-center gap-2">
           <Settings className="h-4 w-4" style={{ color: '#4f7f2a' }} />
-          PrevĂˇdzka
+          Prevádzka
         </h3>
 
         <div className="flex items-center justify-between">
-          <Label>OtvorenĂ©</Label>
+          <Label>Otvorené</Label>
           <Switch
             checked={form.isOpen}
             onCheckedChange={(v) => setForm(prev => ({ ...prev, isOpen: v }))}
@@ -751,7 +751,7 @@ function AdminSettings() {
         </div>
 
         <div className="flex items-center justify-between">
-          <Label>Rozvoz povolenĂ˝</Label>
+          <Label>Rozvoz povolený</Label>
           <Switch
             checked={form.deliveryEnabled}
             onCheckedChange={(v) => setForm(prev => ({ ...prev, deliveryEnabled: v }))}
@@ -759,7 +759,7 @@ function AdminSettings() {
         </div>
 
         <div className="flex items-center justify-between">
-          <Label>OsobnĂ˝ odber povolenĂ˝</Label>
+          <Label>Osobný odber povolený</Label>
           <Switch
             checked={form.pickupEnabled}
             onCheckedChange={(v) => setForm(prev => ({ ...prev, pickupEnabled: v }))}
@@ -770,12 +770,12 @@ function AdminSettings() {
       <Card className="p-4 space-y-4">
         <h3 className="font-semibold flex items-center gap-2">
           <MessageSquare className="h-4 w-4" style={{ color: '#4f7f2a' }} />
-          SprĂˇva pre zĂˇkaznĂ­kov
+          Správa pre zákazníkov
         </h3>
         <Textarea
           value={form.customerMessage || ''}
           onChange={(e) => setForm(prev => ({ ...prev, customerMessage: e.target.value }))}
-          placeholder="NapĹ™. Vitajte v Pizza JaĹˇterka!"
+          placeholder="Např. Vitajte v Pizza Jašterka!"
           rows={3}
         />
       </Card>
@@ -783,11 +783,11 @@ function AdminSettings() {
       <Card className="p-4 space-y-4">
         <h3 className="font-semibold flex items-center gap-2">
           <Clock className="h-4 w-4" style={{ color: '#4f7f2a' }} />
-          ÄŚas a objednĂˇvky
+          Čas a objednávky
         </h3>
         <div className="space-y-3">
           <div>
-            <Label>PriemernĂ˝ ÄŤas prĂ­pravy (min)</Label>
+            <Label>Priemerný čas prípravy (min)</Label>
             <Input
               type="number"
               value={form.averagePrepMinutes || ''}
@@ -795,7 +795,7 @@ function AdminSettings() {
             />
           </div>
           <div>
-            <Label>MinimĂˇlna suma objednĂˇvky (â‚¬)</Label>
+            <Label>Minimálna suma objednávky (€)</Label>
             <Input
               type="number"
               step="0.01"
@@ -813,7 +813,7 @@ function AdminSettings() {
         </h3>
         <div className="space-y-3">
           <div>
-            <Label>TelefĂłn</Label>
+            <Label>Telefón</Label>
             <Input
               value={form.storePhone || ''}
               onChange={(e) => setForm(prev => ({ ...prev, storePhone: e.target.value }))}
@@ -825,7 +825,7 @@ function AdminSettings() {
             <Input
               value={form.storeAddress || ''}
               onChange={(e) => setForm(prev => ({ ...prev, storeAddress: e.target.value }))}
-              placeholder="HlavnĂˇ 45, 920 01 Hlohovec"
+              placeholder="Hlavná 45, 920 01 Hlohovec"
             />
           </div>
         </div>
@@ -839,13 +839,13 @@ function AdminSettings() {
         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4f7f2a')}
         onClick={() => updateSettingsMutation.mutate(form)}
       >
-        {updateSettingsMutation.isPending ? 'UkladĂˇm...' : 'UloĹľiĹĄ nastavenia'}
+        {updateSettingsMutation.isPending ? 'Ukladám...' : 'Uložiť nastavenia'}
       </Button>
     </div>
   )
 }
 
-// â”€â”€â”€ Admin Couriers â”€â”€â”€
+// ─── Admin Couriers ───
 type CourierForm = {
   courierId?: string
   displayName: string
@@ -1181,7 +1181,7 @@ function AdminStats() {
               <ShoppingBag className="h-5 w-5" style={{ color: '#4f7f2a' }} />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">DneĹˇnĂ© objednĂˇvky</p>
+              <p className="text-sm text-muted-foreground">Dnešné objednávky</p>
               <p className="text-2xl font-bold">{stats?.todaysOrderCount || 0}</p>
             </div>
           </div>
@@ -1192,7 +1192,7 @@ function AdminStats() {
               <DollarSign className="h-5 w-5" style={{ color: '#c73325' }} />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">DneĹˇnĂ˝ obrat</p>
+              <p className="text-sm text-muted-foreground">Dnešný obrat</p>
               <p className="text-2xl font-bold" style={{ color: '#4f7f2a' }}>
                 {formatPrice(stats?.todaysRevenue || 0)}
               </p>
@@ -1205,7 +1205,7 @@ function AdminStats() {
               <TrendingUp className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Celkom objednĂˇvok</p>
+              <p className="text-sm text-muted-foreground">Celkom objednávok</p>
               <p className="text-2xl font-bold">
                 {Object.values(stats?.orderCountsByStatus || {}).reduce((a: number, b: unknown) => a + Number(b), 0) as number}
               </p>
@@ -1218,7 +1218,7 @@ function AdminStats() {
       <Card className="p-4">
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <BarChart3 className="h-4 w-4" style={{ color: '#4f7f2a' }} />
-          ObjednĂˇvky podÄľa stavu
+          Objednávky podľa stavu
         </h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Object.entries(ORDER_STATUS_LABELS).map(([status, label]) => {
