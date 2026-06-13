@@ -7,13 +7,14 @@
     "build": "prisma generate --schema=prisma/schema.sqlite.prisma && next build --webpack",
     "start": "next start",
     "lint": "eslint .",
+    "qa:orders": "node scripts/qa-orders-flow.mjs",
     "postinstall": "prisma generate --schema=prisma/schema.sqlite.prisma",
     "db:push": "prisma db push --schema=prisma/schema.sqlite.prisma",
     "db:generate": "prisma generate --schema=prisma/schema.sqlite.prisma",
     "db:migrate": "prisma migrate dev --schema=prisma/schema.sqlite.prisma",
     "db:migrate:prod": "prisma db push --schema=prisma/schema.prisma",
     "db:reset": "prisma migrate reset --schema=prisma/schema.sqlite.prisma",
-    "db:seed": "bunx prisma db seed --schema=prisma/schema.sqlite.prisma",
+    "db:seed": "prisma db seed --schema=prisma/schema.sqlite.prisma",
     "vercel-build": "prisma generate --schema=prisma/schema.prisma && prisma db push --schema=prisma/schema.prisma && next build --webpack"
   },
   "dependencies": {
@@ -94,10 +95,11 @@
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "tw-animate-css": "^1.3.5",
     "typescript": "^5"
   },
   "prisma": {
-    "seed": "bunx tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts"
   }
 }

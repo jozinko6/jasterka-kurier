@@ -46,6 +46,8 @@ local-*
 *.log
 dev.log
 dev.out.log
+dev-*.log
+prisma/db/
 test
 prompt
 
