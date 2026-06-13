@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
-import { CourierStatus, VehicleType } from '@prisma/client'
+import { CourierStatus, DeliveryAssignmentStatus, OrderStatus, VehicleType } from '@prisma/client'
 import { requireRole } from '@/lib/auth'
 import {
   createCourierSchema,
@@ -10,10 +10,40 @@ import {
   validateBody,
 } from '@/lib/validations'
 
+const ACTIVE_ASSIGNMENT_STATUSES: DeliveryAssignmentStatus[] = [
+  'ASSIGNED',
+  'ACCEPTED',
+  'PICKED_UP',
+]
+
+const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
+  'ASSIGNED_TO_COURIER',
+  'PICKED_UP',
+  'ON_THE_WAY',
+]
+
 const courierInclude = {
   user: {
     select: { id: true, email: true, phone: true, role: true, isActive: true },
   },
+  _count: {
+    select: {
+      assignments: {
+        where: {
+          status: { in: ACTIVE_ASSIGNMENT_STATUSES },
+          order: { status: { in: ACTIVE_ORDER_STATUSES } },
+        },
+      },
+    },
+  },
+}
+
+function withComputedActiveOrderCount<T extends { _count?: { assignments: number } }>(courier: T) {
+  const { _count, ...rest } = courier
+  return {
+    ...rest,
+    activeOrderCount: _count?.assignments ?? 0,
+  }
 }
 
 function cleanNullable(value: string | null | undefined) {
@@ -58,12 +88,12 @@ export async function GET(request: NextRequest) {
 
     const canManage = authResult.user.role === 'ADMIN' || authResult.user.role === 'OWNER'
     const couriers = await db.courier.findMany({
-      where: canManage ? {} : { isActive: true },
+      where: canManage ? {} : { isActive: true, userId: authResult.user.id },
       include: courierInclude,
       orderBy: { displayName: 'asc' },
     })
 
-    return NextResponse.json(couriers)
+    return NextResponse.json(couriers.map(withComputedActiveOrderCount))
   } catch (error) {
     console.error('Error fetching couriers:', error)
     return NextResponse.json(
@@ -117,7 +147,7 @@ export async function POST(request: NextRequest) {
       })
     })
 
-    return NextResponse.json(courier, { status: 201 })
+    return NextResponse.json(withComputedActiveOrderCount(courier), { status: 201 })
   } catch (error) {
     console.error('Error creating courier:', error)
     return NextResponse.json(
@@ -191,7 +221,7 @@ export async function PUT(request: NextRequest) {
       })
     })
 
-    return NextResponse.json(updatedCourier)
+    return NextResponse.json(withComputedActiveOrderCount(updatedCourier))
   } catch (error) {
     console.error('Error updating courier:', error)
     return NextResponse.json(
@@ -231,7 +261,7 @@ export async function PATCH(request: NextRequest) {
       include: courierInclude,
     })
 
-    return NextResponse.json(updatedCourier)
+    return NextResponse.json(withComputedActiveOrderCount(updatedCourier))
   } catch (error) {
     console.error('Error updating courier status:', error)
     return NextResponse.json(
@@ -277,7 +307,7 @@ export async function DELETE(request: NextRequest) {
       })
     })
 
-    return NextResponse.json(updatedCourier)
+    return NextResponse.json(withComputedActiveOrderCount(updatedCourier))
   } catch (error) {
     console.error('Error deleting courier:', error)
     return NextResponse.json(

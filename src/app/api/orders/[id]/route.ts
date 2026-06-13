@@ -128,7 +128,17 @@ export async function PATCH(
 
     const data = validation.data
 
-    const existingOrder = await db.order.findUnique({ where: { id } })
+    const existingOrder = await db.order.findUnique({
+      where: { id },
+      include: {
+        assignments: {
+          select: {
+            courierId: true,
+            status: true,
+          },
+        },
+      },
+    })
     if (!existingOrder) {
       return NextResponse.json(
         { error: 'Objednavka nenajdena' },
@@ -165,8 +175,10 @@ export async function PATCH(
         break
     }
 
+    const affectedCourierIds = [...new Set(existingOrder.assignments.map((assignment) => assignment.courierId))]
+
     const updatedOrder = await db.$transaction(async (tx) => {
-      return tx.order.update({
+      const order = await tx.order.update({
         where: { id },
         data: {
           status: data.status as OrderStatus,
@@ -185,8 +197,72 @@ export async function PATCH(
             orderBy: { createdAt: 'asc' },
           },
           deliveryZone: true,
+          assignments: {
+            include: {
+              courier: {
+                include: {
+                  user: { select: { id: true, email: true } },
+                },
+              },
+            },
+          },
         },
       })
+
+      if (data.status === 'PICKED_UP') {
+        await tx.deliveryAssignment.updateMany({
+          where: {
+            orderId: id,
+            status: { in: ['ASSIGNED', 'ACCEPTED'] },
+          },
+          data: {
+            status: 'PICKED_UP',
+            pickedUpAt: now,
+          },
+        })
+      }
+
+      if (data.status === 'DELIVERED') {
+        await tx.deliveryAssignment.updateMany({
+          where: {
+            orderId: id,
+            status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'] },
+          },
+          data: {
+            status: 'DELIVERED',
+            deliveredAt: now,
+          },
+        })
+      }
+
+      if (data.status === 'CANCELLED') {
+        await tx.deliveryAssignment.updateMany({
+          where: {
+            orderId: id,
+            status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'] },
+          },
+          data: {
+            status: 'CANCELLED',
+          },
+        })
+      }
+
+      for (const courierId of affectedCourierIds) {
+        const activeOrderCount = await tx.deliveryAssignment.count({
+          where: {
+            courierId,
+            status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'] },
+            order: { status: { in: ['ASSIGNED_TO_COURIER', 'PICKED_UP', 'ON_THE_WAY'] } },
+          },
+        })
+
+        await tx.courier.update({
+          where: { id: courierId },
+          data: { activeOrderCount },
+        })
+      }
+
+      return order
     })
 
     return NextResponse.json(decimalToNumber(updatedOrder))

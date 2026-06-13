@@ -40,7 +40,8 @@ export function CourierSection() {
     queryFn: () => authFetch('/api/couriers').then(r => r.json()),
   })
 
-  const selectedCourier = couriers?.find(c => c.id === selectedCourierId)
+  const effectiveCourierId = selectedCourierId ?? (couriers?.length === 1 ? couriers[0].id : null)
+  const selectedCourier = couriers?.find(c => c.id === effectiveCourierId)
 
   const updateCourierMutation = useMutation({
     mutationFn: async ({ courierId, status }: { courierId: string; status: string }) => {
@@ -70,21 +71,24 @@ export function CourierSection() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['courier-orders'] })
+      queryClient.invalidateQueries({ queryKey: ['courier-orders-picked-up'] })
+      queryClient.invalidateQueries({ queryKey: ['courier-orders-on-the-way'] })
       queryClient.invalidateQueries({ queryKey: ['courier-earnings'] })
-      toast.success('Stav objednávky aktualizovaný')
+      queryClient.invalidateQueries({ queryKey: ['couriers'] })
+      toast.success('Stav objedn?vky aktualizovan?')
     },
   })
 
   // If no courier selected, show selection
-  if (!selectedCourierId) {
+  if (!effectiveCourierId) {
     return (
       <div className="flex flex-col h-full">
         <div className="p-4 border-b">
           <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: '#4f7f2a' }}>
             <Bike className="h-6 w-6" />
-            Kuriér
+            Kuri?r
           </h2>
-          <p className="text-sm text-muted-foreground">Vyberte kuriéra</p>
+          <p className="text-sm text-muted-foreground">Vyberte kuri?ra</p>
         </div>
 
         <div className="flex-1 p-4 space-y-3">
@@ -134,17 +138,21 @@ export function CourierSection() {
       courier={selectedCourier!}
       onToggleOnline={(online) => {
         updateCourierMutation.mutate({
-          courierId: selectedCourierId,
+          courierId: effectiveCourierId,
           status: online ? 'AVAILABLE' : 'OFFLINE',
         })
       }}
       onPickup={(orderId) => {
         updateOrderMutation.mutate({ orderId, status: 'PICKED_UP' })
-        updateCourierMutation.mutate({ courierId: selectedCourierId, status: 'PICKING_UP' })
+        updateCourierMutation.mutate({ courierId: effectiveCourierId, status: 'PICKING_UP' })
+      }}
+      onStartDelivery={(orderId) => {
+        updateOrderMutation.mutate({ orderId, status: 'ON_THE_WAY' })
+        updateCourierMutation.mutate({ courierId: effectiveCourierId, status: 'DELIVERING' })
       }}
       onDeliver={(orderId) => {
         updateOrderMutation.mutate({ orderId, status: 'DELIVERED' })
-        updateCourierMutation.mutate({ courierId: selectedCourierId, status: 'AVAILABLE' })
+        updateCourierMutation.mutate({ courierId: effectiveCourierId, status: 'AVAILABLE' })
       }}
       onBack={() => setSelectedCourierId(null)}
       isToggling={updateCourierMutation.isPending}
@@ -156,6 +164,7 @@ function CourierDashboard({
   courier,
   onToggleOnline,
   onPickup,
+  onStartDelivery,
   onDeliver,
   onBack,
   isToggling,
@@ -163,6 +172,7 @@ function CourierDashboard({
   courier: Courier
   onToggleOnline: (online: boolean) => void
   onPickup: (orderId: string) => void
+  onStartDelivery: (orderId: string) => void
   onDeliver: (orderId: string) => void
   onBack: () => void
   isToggling: boolean
@@ -179,8 +189,15 @@ function CourierDashboard({
 
   // Also fetch orders in relevant statuses
   const { data: pickupOrders } = useQuery<Order[]>({
-    queryKey: ['pickup-orders'],
+    queryKey: ['courier-orders-picked-up'],
     queryFn: () => authFetch('/api/orders?status=PICKED_UP').then(r => r.json()),
+    enabled: isOnline,
+    refetchInterval: 10000,
+  })
+
+  const { data: onTheWayOrders } = useQuery<Order[]>({
+    queryKey: ['courier-orders-on-the-way'],
+    queryFn: () => authFetch('/api/orders?status=ON_THE_WAY').then(r => r.json()),
     enabled: isOnline,
     refetchInterval: 10000,
   })
@@ -194,6 +211,7 @@ function CourierDashboard({
   const assignedOrders = [
     ...(orders?.filter(o => o.assignments?.some(a => a.courierId === courier.id)) || []),
     ...(pickupOrders?.filter(o => o.assignments?.some(a => a.courierId === courier.id)) || []),
+    ...(onTheWayOrders?.filter(o => o.assignments?.some(a => a.courierId === courier.id)) || []),
   ]
 
   return (
@@ -202,7 +220,7 @@ function CourierDashboard({
       <div className="p-4 border-b space-y-3">
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={onBack}>
-            ← Späť
+            ? Sp??
           </Button>
           <div className="flex items-center gap-2">
             <Switch
@@ -316,10 +334,22 @@ function CourierDashboard({
                               onClick={() => onPickup(order.id)}
                             >
                               <PackageCheck className="h-4 w-4 mr-1" />
-                              Vyzdvihnúť
+                              Vyzdvihn??
                             </Button>
                           )}
                           {order.status === 'PICKED_UP' && (
+                            <Button
+                              size="sm"
+                              style={{ backgroundColor: '#4f7f2a', color: 'white' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3d6620')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4f7f2a')}
+                              onClick={() => onStartDelivery(order.id)}
+                            >
+                              <PackageCheck className="h-4 w-4 mr-1" />
+                              Na ceste
+                            </Button>
+                          )}
+                          {order.status === 'ON_THE_WAY' && (
                             <Button
                               size="sm"
                               style={{ backgroundColor: '#c73325', color: 'white' }}
@@ -328,7 +358,7 @@ function CourierDashboard({
                               onClick={() => onDeliver(order.id)}
                             >
                               <PackageCheck className="h-4 w-4 mr-1" />
-                              Doručené
+                              Doru?en?
                             </Button>
                           )}
                         </div>

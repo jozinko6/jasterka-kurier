@@ -28,6 +28,23 @@ export async function GET(request: NextRequest) {
       where.status = status as OrderStatus
     }
 
+    if (authResult.user.role === 'COURIER') {
+      const courier = await db.courier.findUnique({
+        where: { userId: authResult.user.id },
+        select: { id: true },
+      })
+
+      if (!courier) {
+        return NextResponse.json([])
+      }
+
+      where.assignments = {
+        some: {
+          courierId: courier.id,
+        },
+      }
+    }
+
     const orders = await db.order.findMany({
       where,
       orderBy: { createdAt: 'desc' },
