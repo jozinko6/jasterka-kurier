@@ -160,7 +160,8 @@ async function main() {
   assert(publicTracking.id === createdOrder.id, 'Public tracking returned wrong order')
   assert(!('customerPhone' in publicTracking), 'Public tracking leaks customerPhone')
   assert(!('deliveryAddressLine1' in publicTracking), 'Public tracking leaks delivery address')
-  assert(!('assignments' in publicTracking), 'Public tracking leaks assignments')
+  assert(Array.isArray(publicTracking.assignments), 'Public tracking should include sanitized assignments array')
+  assert(publicTracking.assignments.length === 0, 'New public tracking should not show courier before dispatch')
   console.log('✓ public order tracking is sanitized')
 
   const kitchenOrders = await request('/api/kitchen', { headers: kitchen.headers })
@@ -204,6 +205,12 @@ async function main() {
     }),
   })
   assert(assignment.id, 'Dispatch did not return an assignment id')
+  const assignedPublicTracking = await request(`/api/orders/${createdOrder.id}`)
+  const publicCourier = assignedPublicTracking.assignments?.[0]?.courier
+  assert(publicCourier?.displayName === availableCourier.displayName, 'Public tracking does not show assigned courier')
+  assert(!('phone' in publicCourier), 'Public tracking leaks courier phone')
+  assert(!('user' in publicCourier), 'Public tracking leaks courier user')
+  console.log('✓ public order tracking shows the assigned courier only')
   console.log(`✓ admin assigned order to courier ${availableCourier.displayName}`)
 
   await requestExpectingStatus('/api/dispatch', 409, {

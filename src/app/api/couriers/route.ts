@@ -139,7 +139,9 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           displayName: data.displayName.trim(),
           phone,
+          profilePhotoUrl: cleanNullable(data.profilePhotoUrl),
           vehicleType: (data.vehicleType ?? 'CAR') as VehicleType,
+          licensePlate: (data.vehicleType ?? 'CAR') === 'CAR' ? cleanNullable(data.licensePlate) : null,
           status: isActive ? ((data.status ?? 'AVAILABLE') as CourierStatus) : 'OFFLINE',
           isActive,
         },
@@ -159,7 +161,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const authResult = await requireRole(request, ['ADMIN', 'OWNER'])
+    const authResult = await requireRole(request, ['ADMIN', 'OWNER', 'COURIER'])
     if ('error' in authResult) {
       return authResult.error
     }
@@ -182,25 +184,38 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    const canManage = authResult.user.role === 'ADMIN' || authResult.user.role === 'OWNER'
+    if (!canManage && courier.userId !== authResult.user.id) {
+      return NextResponse.json(
+        { error: 'Nemáte oprávnenie upraviť tohto kuriéra' },
+        { status: 403 }
+      )
+    }
+
     const email = data.email !== undefined ? cleanNullable(data.email)?.toLowerCase() ?? null : courier.user.email
     const phone = data.phone !== undefined ? cleanNullable(data.phone) : courier.user.phone
     const uniqueError = await ensureUniqueLogin(email, phone, courier.userId)
     if (uniqueError) return uniqueError
 
     const userUpdate: Record<string, unknown> = {}
-    if (data.email !== undefined) userUpdate.email = email
+    if (canManage && data.email !== undefined) userUpdate.email = email
     if (data.phone !== undefined) userUpdate.phone = phone
     if (data.password && data.password.length > 0) {
       userUpdate.passwordHash = await bcrypt.hash(data.password, 10)
     }
-    if (data.isActive !== undefined) userUpdate.isActive = data.isActive
+    if (canManage && data.isActive !== undefined) userUpdate.isActive = data.isActive
 
     const courierUpdate: Record<string, unknown> = {}
     if (data.displayName !== undefined) courierUpdate.displayName = data.displayName.trim()
     if (data.phone !== undefined) courierUpdate.phone = phone
     if (data.vehicleType !== undefined) courierUpdate.vehicleType = data.vehicleType as VehicleType
+    if (data.profilePhotoUrl !== undefined) courierUpdate.profilePhotoUrl = cleanNullable(data.profilePhotoUrl)
+    if (data.licensePlate !== undefined || data.vehicleType !== undefined) {
+      const nextVehicleType = (data.vehicleType ?? courier.vehicleType) as VehicleType
+      courierUpdate.licensePlate = nextVehicleType === 'CAR' ? cleanNullable(data.licensePlate ?? courier.licensePlate) : null
+    }
     if (data.status !== undefined) courierUpdate.status = data.status as CourierStatus
-    if (data.isActive !== undefined) {
+    if (canManage && data.isActive !== undefined) {
       courierUpdate.isActive = data.isActive
       if (!data.isActive) courierUpdate.status = 'OFFLINE'
       if (data.isActive && courier.status === 'OFFLINE' && !data.status) courierUpdate.status = 'AVAILABLE'
@@ -233,7 +248,7 @@ export async function PUT(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const authResult = await requireRole(request, ['ADMIN', 'OWNER'])
+    const authResult = await requireRole(request, ['ADMIN', 'OWNER', 'COURIER'])
     if ('error' in authResult) {
       return authResult.error
     }
@@ -252,6 +267,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         { error: 'Kuriér nenájdený' },
         { status: 404 }
+      )
+    }
+
+    const canManage = authResult.user.role === 'ADMIN' || authResult.user.role === 'OWNER'
+    if (!canManage && courier.userId !== authResult.user.id) {
+      return NextResponse.json(
+        { error: 'Nemáte oprávnenie upraviť tohto kuriéra' },
+        { status: 403 }
       )
     }
 

@@ -62,6 +62,8 @@ export const createCourierSchema = z.object({
   phone: z.string().optional().nullable(),
   password: z.string().min(6, 'Heslo musí mať aspoň 6 znakov'),
   vehicleType: z.enum(['BICYCLE', 'SCOOTER', 'CAR']).optional(),
+  profilePhotoUrl: z.string().optional().nullable(),
+  licensePlate: z.string().optional().nullable(),
   status: z.enum(['OFFLINE', 'AVAILABLE', 'ASSIGNED', 'PICKING_UP', 'DELIVERING', 'BREAK']).optional(),
   isActive: z.boolean().optional(),
 })
@@ -73,6 +75,8 @@ export const updateCourierSchema = z.object({
   phone: z.string().optional().nullable(),
   password: z.string().min(6, 'Heslo musí mať aspoň 6 znakov').optional().or(z.literal('')),
   vehicleType: z.enum(['BICYCLE', 'SCOOTER', 'CAR']).optional(),
+  profilePhotoUrl: z.string().optional().nullable(),
+  licensePlate: z.string().optional().nullable(),
   status: z.enum(['OFFLINE', 'AVAILABLE', 'ASSIGNED', 'PICKING_UP', 'DELIVERING', 'BREAK']).optional(),
   isActive: z.boolean().optional(),
 })

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 export default function KitchenPage() {
   useServiceWorker('/sw-kuchyna.js')
   const { isAuthenticated, isRestoring, user, logout, restore } = useAuthStore()
+  const canOpenKitchen = isAuthenticated && user?.role === 'KITCHEN'
 
   useEffect(() => {
     restore()
@@ -25,12 +26,12 @@ export default function KitchenPage() {
     )
   }
 
-  if (!isAuthenticated) {
+  if (!canOpenKitchen) {
     return (
       <LoginForm
-        requiredRole={['ADMIN', 'KITCHEN', 'OWNER']}
-        title="Kuchyňa — Prihlásenie"
-        description="Prihláste sa pre prístup do kuchynského panelu"
+        requiredRole={['KITCHEN']}
+        title="Kuchyňa - Prihlásenie"
+        description="Prihláste sa kuchynským účtom"
       />
     )
   }
@@ -43,7 +44,7 @@ export default function KitchenPage() {
             <ChefHat className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-lg text-white">Kuchyňa — Pizza Jašterka</h1>
+            <h1 className="font-bold text-lg text-white">Kuchyňa - Pizza Jašterka</h1>
             <p className="text-xs text-gray-400">Prihlásený: {user?.email} ({user?.role})</p>
           </div>
         </div>
@@ -70,8 +71,7 @@ export default function KitchenPage() {
         <KitchenSection />
       </main>
 
-      {/* PWA Install Banner */}
-      <PWAInstallBanner appName="Kuchyňa" icon="👨‍🍳" />
+      <PWAInstallBanner appName="Kuchyňa" icon="🍳" />
     </div>
   )
 }

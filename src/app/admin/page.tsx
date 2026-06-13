@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 
 export default function AdminPage() {
   const { isAuthenticated, isRestoring, user, logout, restore } = useAuthStore()
+  const canOpenAdmin = isAuthenticated && (user?.role === 'ADMIN' || user?.role === 'OWNER')
 
   useEffect(() => {
     restore()
@@ -22,12 +23,12 @@ export default function AdminPage() {
     )
   }
 
-  if (!isAuthenticated) {
+  if (!canOpenAdmin) {
     return (
       <LoginForm
         requiredRole={['ADMIN', 'OWNER']}
-        title="Admin — Prihlásenie"
-        description="Prihláste sa pre prístup do administračného panelu"
+        title="Admin - Prihlásenie"
+        description="Prihláste sa administrátorským účtom"
       />
     )
   }
@@ -40,7 +41,7 @@ export default function AdminPage() {
             <Shield className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-lg" style={{ color: '#4f7f2a' }}>Admin — Pizza Jašterka</h1>
+            <h1 className="font-bold text-lg" style={{ color: '#4f7f2a' }}>Admin - Pizza Jašterka</h1>
             <p className="text-xs text-muted-foreground">Prihlásený: {user?.email} ({user?.role})</p>
           </div>
         </div>

@@ -88,6 +88,27 @@ export async function GET(
             selectedOptions: true,
           },
         },
+        assignments: {
+          where: {
+            status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'] },
+          },
+          orderBy: { assignedAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            courierId: true,
+            courier: {
+              select: {
+                id: true,
+                displayName: true,
+                profilePhotoUrl: true,
+                licensePlate: true,
+                vehicleType: true,
+              },
+            },
+          },
+        },
       },
     })
 

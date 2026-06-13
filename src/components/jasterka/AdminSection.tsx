@@ -853,6 +853,8 @@ type CourierForm = {
   phone: string
   password: string
   vehicleType: 'BICYCLE' | 'SCOOTER' | 'CAR'
+  profilePhotoUrl: string
+  licensePlate: string
   status: string
   isActive: boolean
 }
@@ -867,6 +869,8 @@ function AdminCouriers() {
     phone: '',
     password: '',
     vehicleType: 'CAR',
+    profilePhotoUrl: '',
+    licensePlate: '',
     status: 'OFFLINE',
     isActive: false,
   })
@@ -919,6 +923,8 @@ function AdminCouriers() {
       phone: '',
       password: '',
       vehicleType: 'CAR',
+      profilePhotoUrl: '',
+      licensePlate: '',
       status: 'OFFLINE',
       isActive: false,
     })
@@ -934,6 +940,8 @@ function AdminCouriers() {
       phone: courier.user?.phone || courier.phone || '',
       password: '',
       vehicleType: courier.vehicleType,
+      profilePhotoUrl: courier.profilePhotoUrl || '',
+      licensePlate: courier.licensePlate || '',
       status: courier.status,
       isActive: courier.isActive,
     })
@@ -961,6 +969,8 @@ function AdminCouriers() {
       phone: form.phone.trim() || null,
       ...(form.password ? { password: form.password } : {}),
       vehicleType: form.vehicleType,
+      profilePhotoUrl: form.profilePhotoUrl.trim() || null,
+      licensePlate: form.vehicleType === 'CAR' ? form.licensePlate.trim() || null : null,
       status: form.status,
       isActive: form.isActive,
     })
@@ -973,6 +983,8 @@ function AdminCouriers() {
       email: courier.user?.email || null,
       phone: courier.user?.phone || courier.phone || null,
       vehicleType: courier.vehicleType,
+      profilePhotoUrl: courier.profilePhotoUrl || null,
+      licensePlate: courier.licensePlate || null,
       status: courier.status,
       isActive: courier.isActive,
       ...fields,
@@ -998,9 +1010,17 @@ function AdminCouriers() {
         {couriers?.map((courier) => (
           <Card key={courier.id} className="p-4">
             <div className="flex items-start justify-between mb-3">
-              <div>
-                <h4 className="font-semibold">{courier.displayName}</h4>
-                <div className="text-sm text-muted-foreground space-y-0.5 mt-1">
+              <div className="flex items-start gap-3">
+                <div className="h-12 w-12 rounded-full flex items-center justify-center overflow-hidden bg-muted">
+                  {courier.profilePhotoUrl ? (
+                    <img src={courier.profilePhotoUrl} alt={courier.displayName} className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <h4 className="font-semibold">{courier.displayName}</h4>
+                  <div className="text-sm text-muted-foreground space-y-0.5 mt-1">
                   {courier.user?.email && (
                     <div className="flex items-center gap-1">
                       <Mail className="h-3 w-3" />
@@ -1016,6 +1036,8 @@ function AdminCouriers() {
                   <div className="flex items-center gap-1">
                     <Truck className="h-3 w-3" />
                     {VEHICLE_TYPE_LABELS[courier.vehicleType] || courier.vehicleType}
+                    {courier.vehicleType === 'CAR' && courier.licensePlate ? `, SPZ ${courier.licensePlate}` : ''}
+                  </div>
                   </div>
                 </div>
               </div>
@@ -1149,6 +1171,24 @@ function AdminCouriers() {
                 </Select>
               </div>
             </div>
+            <div>
+              <Label>Fotka profilu (URL)</Label>
+              <Input
+                value={form.profilePhotoUrl}
+                placeholder="https://..."
+                onChange={(e) => setForm(prev => ({ ...prev, profilePhotoUrl: e.target.value }))}
+              />
+            </div>
+            {form.vehicleType === 'CAR' && (
+              <div>
+                <Label>SPZ auta</Label>
+                <Input
+                  value={form.licensePlate}
+                  placeholder="HC123AB"
+                  onChange={(e) => setForm(prev => ({ ...prev, licensePlate: e.target.value.toUpperCase() }))}
+                />
+              </div>
+            )}
             <div className="flex items-center justify-between rounded-md border p-3">
               <Label>Schválený a aktívny</Label>
               <Switch checked={form.isActive} onCheckedChange={(value) => setForm(prev => ({ ...prev, isActive: value, status: value && prev.status === 'OFFLINE' ? 'AVAILABLE' : prev.status }))} />
@@ -1237,4 +1277,3 @@ function AdminStats() {
     </div>
   )
 }
-

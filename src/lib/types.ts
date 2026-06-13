@@ -115,6 +115,8 @@ export interface Courier {
   id: string
   displayName: string
   phone: string | null
+  profilePhotoUrl: string | null
+  licensePlate: string | null
   vehicleType: 'BICYCLE' | 'SCOOTER' | 'CAR'
   status: 'OFFLINE' | 'AVAILABLE' | 'ASSIGNED' | 'PICKING_UP' | 'DELIVERING' | 'BREAK'
   isActive: boolean

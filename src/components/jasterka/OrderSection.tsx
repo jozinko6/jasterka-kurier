@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { MenuCategory, MenuItem, MenuItemOption, DeliveryZone, Order, OrderStatus } from '@/lib/types'
-import { formatPrice, getStatusColor, ORDER_STATUS_LABELS } from '@/lib/types'
+import { formatPrice, getStatusColor, ORDER_STATUS_LABELS, VEHICLE_TYPE_LABELS } from '@/lib/types'
 import { useCartStore } from '@/stores/cart-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -965,6 +965,7 @@ function OrderTracking({ orderId, onBack }: { orderId: string; onBack: () => voi
   ]
 
   const currentStepIndex = order ? statusSteps.indexOf(order.status) : -1
+  const deliveryCourier = order?.assignments?.[0]?.courier
 
   return (
     <div className="flex flex-col h-full">
@@ -994,6 +995,34 @@ function OrderTracking({ orderId, onBack }: { orderId: string; onBack: () => voi
                 {ORDER_STATUS_LABELS[order.status]}
               </Badge>
             </div>
+
+            {deliveryCourier && (
+              <Card className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full flex items-center justify-center overflow-hidden" style={{ backgroundColor: '#f0f7ec' }}>
+                    {deliveryCourier.profilePhotoUrl ? (
+                      <img
+                        src={deliveryCourier.profilePhotoUrl}
+                        alt={deliveryCourier.displayName}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Truck className="h-6 w-6" style={{ color: '#4f7f2a' }} />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Objednávku vezie</p>
+                    <h3 className="font-semibold truncate">{deliveryCourier.displayName}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {VEHICLE_TYPE_LABELS[deliveryCourier.vehicleType] || deliveryCourier.vehicleType}
+                      {deliveryCourier.vehicleType === 'CAR' && deliveryCourier.licensePlate
+                        ? ` • SPZ ${deliveryCourier.licensePlate}`
+                        : ''}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {/* Status stepper */}
             <div className="space-y-2">

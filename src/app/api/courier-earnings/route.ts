@@ -12,7 +12,32 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const courierId = searchParams.get('courierId')
+    const requestedCourierId = searchParams.get('courierId')
+    const canManage = authResult.user.role === 'ADMIN' || authResult.user.role === 'OWNER'
+    let courierId = requestedCourierId
+
+    if (!canManage) {
+      const courier = await db.courier.findUnique({
+        where: { userId: authResult.user.id },
+        select: { id: true },
+      })
+
+      if (!courier) {
+        return NextResponse.json(
+          { error: 'Kuriérsky profil nebol nájdený' },
+          { status: 404 }
+        )
+      }
+
+      if (requestedCourierId && requestedCourierId !== courier.id) {
+        return NextResponse.json(
+          { error: 'Nemáte oprávnenie zobraziť zárobky tohto kuriéra' },
+          { status: 403 }
+        )
+      }
+
+      courierId = courier.id
+    }
 
     const where: Record<string, unknown> = {}
     if (courierId) {

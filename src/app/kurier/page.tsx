@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 export default function CourierPage() {
   useServiceWorker('/sw-kurier.js')
   const { isAuthenticated, isRestoring, user, logout, restore } = useAuthStore()
+  const canOpenCourier = isAuthenticated && user?.role === 'COURIER'
 
   useEffect(() => {
     restore()
@@ -25,12 +26,12 @@ export default function CourierPage() {
     )
   }
 
-  if (!isAuthenticated) {
+  if (!canOpenCourier) {
     return (
       <LoginForm
-        requiredRole={['ADMIN', 'COURIER', 'OWNER']}
-        title="Kuriér — Prihlásenie"
-        description="Prihláste sa pre prístup do kuriérskeho panelu"
+        requiredRole={['COURIER']}
+        title="Kuriér - Prihlásenie"
+        description="Prihláste sa kuriérskym účtom"
       />
     )
   }
@@ -43,7 +44,7 @@ export default function CourierPage() {
             <Bike className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-lg" style={{ color: '#4f7f2a' }}>Kuriér — Pizza Jašterka</h1>
+            <h1 className="font-bold text-lg" style={{ color: '#4f7f2a' }}>Kuriér - Pizza Jašterka</h1>
             <p className="text-xs text-muted-foreground">Prihlásený: {user?.email} ({user?.role})</p>
           </div>
         </div>
@@ -70,7 +71,6 @@ export default function CourierPage() {
         <CourierSection />
       </main>
 
-      {/* PWA Install Banner */}
       <PWAInstallBanner appName="Kuriér" icon="🚗" />
     </div>
   )
