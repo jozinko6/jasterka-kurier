@@ -397,3 +397,90 @@ Stage Summary:
 - Migračný skript je idempotentný a kontroluje finančnú bilanciu
 - Dokumentácia pokrýva všetky aspekty systému
 - Všetky verifikácie prešli: lint ✓, TypeScript ✓, 57/57 testov ✓, build ✓
+
+---
+Task ID: API-1
+Agent: general-purpose (kitchen API)
+Task: Create kitchen API endpoints — estimate service, estimate PATCH, accept POST, kitchen list refactor, public tracking ETA fields
+
+Work Log:
+- Created src/lib/kitchen-estimate-service.ts:
+  * setOrderEstimate(params) — sets estimatedReadyAt using MINUTES or EXACT_TIME mode
+    - validates 5..maxKitchenPrepMinutes (default 180), not in past
+    - rejects CANCELLED/DELIVERED/REFUNDED orders
+    - optimistic concurrency on estimateVersion (compare-and-swap via expectedEstimateVersion)
+    - uses calculateCustomerEtaWindow() to recompute estimatedDeliveryFrom/To
+    - loads RestaurantSettings (deliveryWindowBefore/After, defaultKitchenPrep, maxKitchenPrep)
+    - loads DeliveryZone.estimatedDeliveryMinutes for delivery window
+    - creates KitchenEvent (ESTIMATE_CREATED or ESTIMATE_CHANGED) with metadataJson
+      { oldEstimatedReadyAt, newEstimatedReadyAt, oldVersion, newVersion, reason, actorUserId, mode, source }
+    - estimateSetByUserId = actorUserId (from session)
+    - entire operation in single db.$transaction
+  * delayOrderEstimate(params) — adds additionalMinutes to existing (or fresh) estimate
+    - sets publicDelayReason (HIGH_DEMAND/COMPLEX_ORDER/...) for customer-facing UI
+    - sets estimateStatus = 'DELAYED'
+    - creates KitchenEvent ESTIMATE_DELAYED with metadataJson including delayReason + additionalMinutes
+  * acceptOrderWithEstimate(params) — atomic NEW→ACCEPTED + set estimate + status history + KitchenEvent audit
+    - uses tx.order.updateMany with where: { id, status: 'NEW' } as compare-and-swap (409 on conflict)
+    - validates prepMinutes (5..max)
+    - creates OrderStatusHistory with actor from session
+    - creates KitchenEvent ESTIMATE_CREATED with statusTransition: 'NEW→ACCEPTED' in metadataJson
+    - idempotent: if already ACCEPTED with matching estimate (±1 min tolerance), returns existing
+    - optional expectedStatus and expectedEstimateVersion for client-side concurrency hints
+  * All operations throw KitchenEstimateError with codes ORDER_NOT_FOUND, INVALID_STATUS,
+    STATUS_CONFLICT, ESTIMATE_VERSION_CONFLICT, BUSINESS_RULE_VIOLATION
+- Created src/app/api/kitchen/orders/[id]/estimate/route.ts (PATCH):
+  * Access: ADMIN, KITCHEN, OWNER (via requireRole)
+  * Body validated against kitchenEstimateSchema (Zod v4 discriminated union by `mode`)
+    - MINUTES: { mode, minutes, source?, reason?, expectedVersion? }
+    - EXACT_TIME: { mode, exactTime (ISO), source?, reason?, expectedVersion? }
+    - DELAY: { mode, additionalMinutes, delayReason, reason?, expectedVersion? }
+  * Returns { orderId, estimatedReadyAt, estimatedDeliveryFrom, estimatedDeliveryTo,
+              estimateStatus, estimateVersion, publicDelayReason, updatedAt }
+  * 400 on Zod validation, 409 on version conflict (with currentVersion/expectedVersion
+    in details), 422 on business rule violations, 404 on missing order
+  * Cache-Control: private, no-store, max-age=0
+- Created src/app/api/kitchen/orders/[id]/accept/route.ts (POST):
+  * Access: ADMIN, KITCHEN, OWNER
+  * Body: { prepMinutes, source?, reason?, expectedStatus?, expectedEstimateVersion? }
+  * Atomic NEW→ACCEPTED + estimate + window + status history + KitchenEvent audit
+  * Idempotent: returns existing state if already ACCEPTED with same estimate
+  * 409 on status/estimate-version conflict
+  * Cache-Control: private, no-store, max-age=0
+- Updated src/app/api/kitchen/route.ts (GET):
+  * Uses toKitchenOrderDTO from src/lib/kitchen-dto.ts
+  * Selects ONLY kitchen-relevant fields (no customerName/Phone/Email,
+    no deliveryAddressLine1/2/City/Note, no customerId, no financial totals)
+  * Includes ETA fields, items (kitchen fields only), deliveryZone name only
+  * Adds allowedTransitions per order via getAllowedTransitionsForContext
+    using the authenticated user's role + order type + current status
+  * Keeps polling-friendly (still returns an array of orders directly so
+    existing KitchenSection.tsx useQuery<Order[]> keeps working)
+  * Cache-Control: private, no-store, max-age=0
+- Updated src/lib/order-auth.ts toPublicOrderTrackingDTO:
+  * Added ETA fields to PublicOrderTrackingDTO interface: estimatedReadyAt,
+    estimatedDeliveryFrom, estimatedDeliveryTo, estimateStatus,
+    estimateUpdatedAt, publicDelayReason (all string|null ISO)
+  * Added ETA fields as optional Date|null inputs to the function (so existing
+    callers without these fields still work)
+  * Output always includes ETA fields (null when kitchen hasn't set estimate)
+- Added Zod schemas to src/lib/validations.ts:
+  * kitchenEstimateSchema — discriminated union by `mode` (MINUTES/EXACT_TIME/DELAY)
+  * kitchenAcceptSchema — { prepMinutes, source?, reason?, expectedStatus?, expectedEstimateVersion? }
+
+Verification:
+- bunx tsc --noEmit: 0 errors
+- bun run lint: 0 errors, 0 warnings
+
+Notes for next agents:
+- The estimate PATCH endpoint accepts DELAY as a third discriminated mode in the
+  same route — it dispatches to delayOrderEstimate() under the hood.
+- estimateSetByUserId is ALWAYS authResult.user.id (never from request body).
+- KitchenEvent.eventType uses string values 'ESTIMATE_CREATED', 'ESTIMATE_CHANGED',
+  'ESTIMATE_DELAYED' (the KitchenEvent model stores eventType as String).
+- The accept endpoint's idempotency check uses ±1 minute tolerance, so retries
+  after the estimate drifts more than 1 minute from the requested prepMinutes
+  will NOT be idempotent (they will fail with STATUS_CONFLICT).
+- The kitchen GET route still returns a bare array (not wrapped in {orders: [...]}).
+  If a future agent wants to add pagination, switch to { orders, nextCursor } and
+  update KitchenSection.tsx accordingly.

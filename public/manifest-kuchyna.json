@@ -2,13 +2,18 @@
   "name": "Kuchyňa — Pizza Jašterka",
   "short_name": "Kuchyňa",
   "description": "Kuchynský panel pre personál Pizza Jašterka",
+  "id": "/kuchyna",
   "start_url": "/kuchyna",
   "scope": "/kuchyna",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "orientation": "any",
-  "theme_color": "#1a1a1a",
-  "background_color": "#1a1a1a",
+  "lang": "sk",
+  "dir": "ltr",
+  "theme_color": "#4f7f2a",
+  "background_color": "#f9fafb",
   "categories": ["food", "business"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon-kuchyna-192.png",
@@ -21,6 +26,23 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nové objednávky",
+      "short_name": "Nové",
+      "url": "/kuchyna?view=new"
+    },
+    {
+      "name": "Pripravuje sa",
+      "short_name": "Príprava",
+      "url": "/kuchyna?view=preparing"
+    },
+    {
+      "name": "Hotové objednávky",
+      "short_name": "Hotové",
+      "url": "/kuchyna?view=ready"
     }
   ]
 }

@@ -77,6 +77,36 @@ enum MenuItemOptionType {
   REMOVE
 }
 
+// ─── Order estimate enums ───
+
+enum EstimateSource {
+  KITCHEN_MANUAL
+  KITCHEN_QUICK_PRESET
+  SYSTEM_DEFAULT
+  SYSTEM_RECALCULATION
+  COURIER_UPDATE
+}
+
+enum EstimateStatus {
+  WAITING_FOR_KITCHEN
+  ESTIMATED
+  CONFIRMED
+  DELAYED
+  READY
+  ON_THE_WAY
+  COMPLETED
+  CANCELLED
+}
+
+enum PublicDelayReason {
+  HIGH_DEMAND
+  COMPLEX_ORDER
+  INGREDIENT_DELAY
+  COURIER_DELAY
+  TRAFFIC
+  OTHER
+}
+
 // ─── Courier financial domain enums ───
 
 enum CourierContractType {
@@ -266,6 +296,7 @@ model User {
   agreementStatementsCreated   AgreementEarningsStatement[]  @relation("StatementCreator")
   courierAuditActions          CourierAuditLog[]             @relation("CourierAuditActor")
   legalProfilesVerified        RestaurantLegalProfile[]      @relation("LegalProfileVerifier")
+  estimatesSetBy               Order[]                       @relation("EstimateSetBy")
 }
 
 model AuthSession {
@@ -413,8 +444,21 @@ model Order {
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
+  // ── ETA / estimate fields ──
+  estimatedReadyAt       DateTime?
+  estimatedDeliveryFrom  DateTime?
+  estimatedDeliveryTo    DateTime?
+  estimateSetAt          DateTime?
+  estimateUpdatedAt      DateTime?
+  estimateSetByUserId    String?
+  estimateVersion        Int           @default(0)
+  estimateSource         EstimateSource?
+  estimateStatus         EstimateStatus?
+  publicDelayReason      PublicDelayReason?
+
   customer             Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   deliveryZone         DeliveryZone?     @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
+  estimateSetBy        User?             @relation("EstimateSetBy", fields: [estimateSetByUserId], references: [id], onDelete: SetNull)
   items                OrderItem[]
   statusHistory        OrderStatusHistory[]
   assignments          DeliveryAssignment[]
@@ -520,6 +564,7 @@ model KitchenEvent {
   orderId         String
   eventType       String
   note            String?
+  metadataJson    String?
   createdByUserId String?
   createdAt       DateTime @default(now())
 
@@ -528,17 +573,21 @@ model KitchenEvent {
 }
 
 model RestaurantSettings {
-  id                  String   @id @default(cuid())
-  deliveryEnabled     Boolean  @default(true)
-  pickupEnabled       Boolean  @default(true)
-  isOpen              Boolean  @default(true)
-  customerMessage     String?
-  averagePrepMinutes  Int      @default(30)
-  minimumOrderAmount  Float    @default(0)
-  storePhone          String?
-  storeAddress        String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                         String   @id @default(cuid())
+  deliveryEnabled            Boolean  @default(true)
+  pickupEnabled              Boolean  @default(true)
+  isOpen                     Boolean  @default(true)
+  customerMessage            String?
+  averagePrepMinutes         Int      @default(30)
+  minimumOrderAmount         Float    @default(0)
+  storePhone                 String?
+  storeAddress               String?
+  deliveryWindowBeforeMinutes Int     @default(5)
+  deliveryWindowAfterMinutes  Int     @default(10)
+  defaultKitchenPrepMinutes   Int     @default(25)
+  maxKitchenPrepMinutes       Int     @default(180)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 }
 
 model OpeningHours {

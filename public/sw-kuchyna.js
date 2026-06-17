@@ -1,5 +1,5 @@
 /**
- * Service Worker — Kuriér
+ * Service Worker — Kuchyňa
  *
  * Cache strategy:
  * - /api/* → network-only (NEVER cache authenticated or financial responses)

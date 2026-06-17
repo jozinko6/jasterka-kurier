@@ -231,6 +231,68 @@ export const openingHoursItemSchema = z.object({
 
 export const updateOpeningHoursSchema = z.array(openingHoursItemSchema)
 
+// ─── Kitchen estimate schemas ───
+
+export const kitchenEstimateSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('MINUTES'),
+    minutes: z
+      .number()
+      .int('Počet minút musí byť celé číslo')
+      .min(5, 'Minimálny čas prípravy je 5 minút')
+      .max(180, 'Maximálny čas prípravy je 180 minút'),
+    source: z
+      .enum(['KITCHEN_MANUAL', 'KITCHEN_QUICK_PRESET', 'SYSTEM_DEFAULT'])
+      .optional(),
+    reason: z.string().trim().max(500).optional(),
+    expectedVersion: z.number().int().min(0).optional(),
+  }),
+  z.object({
+    mode: z.literal('EXACT_TIME'),
+    exactTime: z.string().min(1, 'Chýba presný čas'),
+    source: z
+      .enum(['KITCHEN_MANUAL', 'KITCHEN_QUICK_PRESET', 'SYSTEM_DEFAULT'])
+      .optional(),
+    reason: z.string().trim().max(500).optional(),
+    expectedVersion: z.number().int().min(0).optional(),
+  }),
+  z.object({
+    mode: z.literal('DELAY'),
+    additionalMinutes: z
+      .number()
+      .int('Počet minút musí byť celé číslo')
+      .min(1, 'Oneskorenie musí byť aspoň 1 minúta')
+      .max(180, 'Oneskorenie môže byť najviac 180 minút'),
+    delayReason: z.enum(
+      [
+        'HIGH_DEMAND',
+        'COMPLEX_ORDER',
+        'INGREDIENT_DELAY',
+        'COURIER_DELAY',
+        'TRAFFIC',
+        'OTHER',
+      ],
+      { error: 'Neplatný dôvod oneskorenia' }
+    ),
+    reason: z.string().trim().max(500).optional(),
+    expectedVersion: z.number().int().min(0).optional(),
+  }),
+])
+
+export const kitchenAcceptSchema = z.object({
+  prepMinutes: z
+    .number()
+    .int('Počet minút musí byť celé číslo')
+    .min(5, 'Minimálny čas prípravy je 5 minút')
+    .max(180, 'Maximálny čas prípravy je 180 minút'),
+  source: z
+    .enum(['KITCHEN_MANUAL', 'KITCHEN_QUICK_PRESET', 'SYSTEM_DEFAULT'])
+    .optional(),
+  reason: z.string().trim().max(500).optional(),
+  expectedStatus: z.enum(['NEW']).optional(),
+  expectedEstimateVersion: z.number().int().min(0).optional(),
+})
+
 // ─── Helper ───
 
 import { NextResponse } from 'next/server'

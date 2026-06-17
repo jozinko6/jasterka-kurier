@@ -175,6 +175,13 @@ export interface PublicOrderTrackingDTO {
   readyAt: string | null
   pickedUpAt: string | null
   deliveredAt: string | null
+  // ── ETA fields (kitchen-set estimate + delivery window) ──
+  estimatedReadyAt: string | null
+  estimatedDeliveryFrom: string | null
+  estimatedDeliveryTo: string | null
+  estimateStatus: string | null
+  estimateUpdatedAt: string | null
+  publicDelayReason: string | null
   items: Array<{
     id: string
     menuItemNameSnapshot: string
@@ -206,6 +213,11 @@ export interface PublicOrderTrackingDTO {
  * - customerId, deliveryZoneId
  * - internal assignment IDs, courier phone/email, licensePlate
  * - user IDs
+ *
+ * Includes ETA fields (estimatedReadyAt, estimatedDeliveryFrom/To,
+ * estimateStatus, estimateUpdatedAt, publicDelayReason) so the customer
+ * tracking UI can render the live "ready at" / "delivery window" widget
+ * without exposing any kitchen internals.
  */
 export function toPublicOrderTrackingDTO(order: {
   orderNumber: string
@@ -218,6 +230,13 @@ export function toPublicOrderTrackingDTO(order: {
   readyAt: Date | null
   pickedUpAt: Date | null
   deliveredAt: Date | null
+  // ETA fields — optional so older callers don't break, but populated when present
+  estimatedReadyAt?: Date | null
+  estimatedDeliveryFrom?: Date | null
+  estimatedDeliveryTo?: Date | null
+  estimateStatus?: string | null
+  estimateUpdatedAt?: Date | null
+  publicDelayReason?: string | null
   items: Array<{
     id: string
     menuItemNameSnapshot: string
@@ -270,6 +289,13 @@ export function toPublicOrderTrackingDTO(order: {
     readyAt: order.readyAt?.toISOString() ?? null,
     pickedUpAt: order.pickedUpAt?.toISOString() ?? null,
     deliveredAt: order.deliveredAt?.toISOString() ?? null,
+    // ETA fields — always present in the DTO (null when kitchen hasn't set estimate)
+    estimatedReadyAt: order.estimatedReadyAt?.toISOString() ?? null,
+    estimatedDeliveryFrom: order.estimatedDeliveryFrom?.toISOString() ?? null,
+    estimatedDeliveryTo: order.estimatedDeliveryTo?.toISOString() ?? null,
+    estimateStatus: order.estimateStatus ?? null,
+    estimateUpdatedAt: order.estimateUpdatedAt?.toISOString() ?? null,
+    publicDelayReason: order.publicDelayReason ?? null,
     items: order.items,
     courier: activeAssignment?.courier
       ? {
