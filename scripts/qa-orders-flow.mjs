@@ -17,6 +17,8 @@ async function request(path, options = {}) {
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      // QA scripts send Origin to satisfy CSRF middleware (browser equivalent)
+      Origin: BASE_URL,
       ...(options.headers || {}),
     },
   })
@@ -43,6 +45,7 @@ async function requestAllowingStatus(path, expectedStatus, options = {}) {
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      Origin: BASE_URL,
       ...(options.headers || {}),
     },
   })
@@ -58,6 +61,7 @@ async function requestExpectingStatus(path, expectedStatus, options = {}) {
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      Origin: BASE_URL,
       ...(options.headers || {}),
     },
   })
@@ -121,6 +125,12 @@ async function main() {
     .find((item) => item.isActive && item.isAvailable)
   assert(menuItem, 'No active and available menu item found')
 
+  // Load full menu item detail to get option IDs (needed for size selection)
+  const menuItemDetail = await request(`/api/menu/${menuItem.id}`)
+  const sizeOption = (menuItemDetail.options || []).find((o) => o.optionType === 'SIZE' && o.isActive)
+  // For items without SIZE options, selectedSize can be null
+  const selectedSize = sizeOption ? sizeOption.id : null
+
   const zones = await request('/api/zones')
   const zone = zones.find((item) => item.isActive)
   assert(zone, 'No active delivery zone found')
@@ -143,7 +153,7 @@ async function main() {
         {
           menuItemId: menuItem.id,
           quantity: 1,
-          selectedSize: null,
+          selectedSize,
           selectedOptions: [],
           kitchenNote: 'QA item note',
         },
@@ -156,13 +166,24 @@ async function main() {
   assert(createdOrder.orderNumber?.startsWith('JAS-'), 'Order number does not use JAS prefix')
   console.log(`✓ created order ${createdOrder.orderNumber}`)
 
-  const publicTracking = await request(`/api/orders/${createdOrder.id}`)
-  assert(publicTracking.id === createdOrder.id, 'Public tracking returned wrong order')
+  // Public tracking without token should be rejected (P1-15)
+  await requestExpectingStatus(`/api/orders/${createdOrder.id}`, 401)
+  console.log('✓ public tracking without token is rejected')
+
+  // Public tracking WITH token should return sanitized DTO
+  const trackingToken = createdOrder.trackingToken
+  assert(trackingToken, 'Created order should return trackingToken')
+  const publicTracking = await request(`/api/orders/${createdOrder.id}?token=${encodeURIComponent(trackingToken)}`)
+  assert(publicTracking.orderNumber === createdOrder.orderNumber, 'Public tracking returned wrong order')
   assert(!('customerPhone' in publicTracking), 'Public tracking leaks customerPhone')
+  assert(!('customerEmail' in publicTracking), 'Public tracking leaks customerEmail')
+  assert(!('customerName' in publicTracking), 'Public tracking leaks customerName')
   assert(!('deliveryAddressLine1' in publicTracking), 'Public tracking leaks delivery address')
-  assert(Array.isArray(publicTracking.assignments), 'Public tracking should include sanitized assignments array')
-  assert(publicTracking.assignments.length === 0, 'New public tracking should not show courier before dispatch')
-  console.log('✓ public order tracking is sanitized')
+  assert(!('kitchenNote' in publicTracking), 'Public tracking leaks kitchenNote')
+  assert(!('customerId' in publicTracking), 'Public tracking leaks customerId')
+  assert(publicTracking.courier === null, 'New public tracking should not show courier before dispatch')
+  assert(Array.isArray(publicTracking.trackingSteps), 'Public tracking should include trackingSteps')
+  console.log('✓ public order tracking with token is sanitized')
 
   const kitchenOrders = await request('/api/kitchen', { headers: kitchen.headers })
   assert(
@@ -183,7 +204,18 @@ async function main() {
   console.log('✓ kitchen status flow reaches READY')
 
   const couriers = await request('/api/couriers', { headers: courier.headers })
-  const availableCourier = couriers.find((item) => item.isActive && item.status !== 'OFFLINE') || couriers[0]
+  // Find an active courier; if none is AVAILABLE, set one to AVAILABLE via PATCH
+  let availableCourier = couriers.find((item) => item.isActive && item.status === 'AVAILABLE')
+  if (!availableCourier) {
+    availableCourier = couriers.find((item) => item.isActive) || couriers[0]
+    assert(availableCourier?.id, 'No courier available for assignment test')
+    // Set courier to AVAILABLE
+    await request('/api/couriers', {
+      method: 'PATCH',
+      headers: courier.headers,
+      body: JSON.stringify({ courierId: availableCourier.id, status: 'AVAILABLE' }),
+    })
+  }
   assert(availableCourier?.id, 'No courier available for assignment test')
 
   await requestExpectingStatus('/api/dispatch', 403, {
@@ -205,27 +237,38 @@ async function main() {
     }),
   })
   assert(assignment.id, 'Dispatch did not return an assignment id')
-  const assignedPublicTracking = await request(`/api/orders/${createdOrder.id}`)
-  const publicCourier = assignedPublicTracking.assignments?.[0]?.courier
+  const assignedPublicTracking = await request(`/api/orders/${createdOrder.id}?token=${encodeURIComponent(trackingToken)}`)
+  const publicCourier = assignedPublicTracking.courier
   assert(publicCourier?.displayName === availableCourier.displayName, 'Public tracking does not show assigned courier')
   assert(!('phone' in publicCourier), 'Public tracking leaks courier phone')
   assert(!('user' in publicCourier), 'Public tracking leaks courier user')
   console.log('✓ public order tracking shows the assigned courier only')
   console.log(`✓ admin assigned order to courier ${availableCourier.displayName}`)
 
-  await requestExpectingStatus('/api/dispatch', 409, {
+  // Duplicate dispatch should be rejected — either 409 (conflict) or 422 (business rule)
+  // depending on which check fires first (order status vs existing assignment).
+  const dupResponse = await fetch(`${BASE_URL}/api/dispatch`, {
     method: 'POST',
-    headers: admin.headers,
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: BASE_URL,
+      ...admin.headers,
+    },
     body: JSON.stringify({
       orderId: createdOrder.id,
       courierId: availableCourier.id,
     }),
   })
-  console.log('✓ duplicate courier assignment is rejected')
-
-  const assignedOrders = await request('/api/orders?status=ASSIGNED_TO_COURIER', { headers: courier.headers })
   assert(
-    assignedOrders.some((order) => order.id === createdOrder.id),
+    dupResponse.status === 409 || dupResponse.status === 422,
+    `Duplicate dispatch expected 409 or 422, got ${dupResponse.status}`
+  )
+  console.log(`✓ duplicate courier assignment is rejected (${dupResponse.status})`)
+
+  const assignedOrdersResponse = await request('/api/orders?status=ASSIGNED_TO_COURIER', { headers: courier.headers })
+  const assignedOrders = assignedOrdersResponse.orders ?? assignedOrdersResponse
+  assert(
+    Array.isArray(assignedOrders) && assignedOrders.some((order) => order.id === createdOrder.id),
     'Courier cannot see assigned order'
   )
   console.log('✓ courier can see assigned order')

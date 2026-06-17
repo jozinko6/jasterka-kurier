@@ -3,80 +3,156 @@ import { z } from 'zod/v4'
 // ─── Auth Schemas ───
 
 export const loginSchema = z.object({
-  email: z.email('Neplatný email'),
-  password: z.string().min(1, 'Heslo je povinné'),
+  email: z.string().trim().min(1, 'Prihlasovacie meno je povinné').max(200, 'Príliš dlhé'),
+  password: z.string().min(1, 'Heslo je povinné').max(1000, 'Príliš dlhé'),
 })
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Aktuálne heslo je povinné').max(1000),
+  newPassword: z.string().min(8, 'Nové heslo musí mať aspoň 8 znakov').max(1000),
+})
+
+// ─── Phone normalization ───
+
+const PHONE_STRIP = /[\s\-()/]/g
+export function normalizePhone(phone: string): string {
+  const stripped = phone.replace(PHONE_STRIP, '')
+  // If starts with 00, replace with +
+  if (stripped.startsWith('00')) return '+' + stripped.slice(2)
+  // If starts with 0 and not 00, assume SK local → +421
+  if (stripped.startsWith('0') && !stripped.startsWith('00')) return '+421' + stripped.slice(1)
+  return stripped
+}
+
+const phoneSchema = z
+  .string()
+  .transform(normalizePhone)
+  .refine((v) => /^\+\d{6,15}$/.test(v), 'Neplatný telefón (očakávaný formát +421...)')
+
+// ─── URL validation for imageUrl/profilePhotoUrl ───
+
+const urlSchema = z
+  .string()
+  .url('Neplatná URL')
+  .max(2000, 'Príliš dlhá URL')
+  .refine(
+    (v) => v.startsWith('https://') || v.startsWith('http://localhost'),
+    'URL musí byť HTTPS (alebo localhost pre vývoj)'
+  )
+  .nullable()
+  .optional()
+
+// ─── HH:mm validation for opening hours ───
+
+const hhMmSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Čas musí byť vo formáte HH:mm')
+  .nullable()
+  .optional()
 
 // ─── Order Schemas ───
 
-export const createOrderSchema = z.object({
-  customerName: z.string().min(1, 'Meno je povinné'),
-  customerPhone: z.string().min(1, 'Telefón je povinný'),
-  customerEmail: z.email('Neplatný email').optional().or(z.literal('')),
-  orderType: z.enum(['DELIVERY', 'PICKUP', 'SCHEDULED_DELIVERY', 'SCHEDULED_PICKUP']).optional(),
-  paymentMethod: z.enum(['CASH', 'CARD_ON_DELIVERY', 'CARD_ON_PICKUP', 'ONLINE_CARD']).optional(),
-  deliveryZoneId: z.string().optional(),
-  deliveryAddressLine1: z.string().optional(),
-  deliveryCity: z.string().optional(),
-  deliveryNote: z.string().optional(),
-  kitchenNote: z.string().optional(),
-  items: z.array(z.object({
-    menuItemId: z.string().min(1, 'ID položky menu je povinné'),
-    quantity: z.number().int().min(1, 'Množstvo musí byť aspoň 1'),
-    selectedSize: z.string().optional().nullable(),
-    selectedOptions: z.array(z.string()).optional().nullable(),
-    kitchenNote: z.string().optional().nullable(),
-  })).min(1, 'Objednávka musí obsahovať aspoň jednu položku'),
+const MAX_QUANTITY = 50
+
+const orderItemSchema = z.object({
+  menuItemId: z.string().min(1, 'ID položky menu je povinné').max(100),
+  quantity: z.number().int().min(1, 'Množstvo musí byť aspoň 1').max(MAX_QUANTITY, `Maximálne ${MAX_QUANTITY} ks`),
+  selectedSize: z.string().max(100).nullable().optional(),
+  selectedOptions: z.array(z.string().max(100)).max(50, 'Príliš veľa volieb').nullable().optional(),
+  kitchenNote: z.string().trim().max(500, 'Poznámka je príliš dlhá').nullable().optional(),
 })
 
+// Base fields shared by DELIVERY and PICKUP
+const orderBase = {
+  customerName: z.string().trim().min(1, 'Meno je povinné').max(100, 'Meno je príliš dlhé'),
+  customerPhone: phoneSchema,
+  customerEmail: z.string().trim().toLowerCase().email('Neplatný email').max(200).optional().or(z.literal('')),
+  paymentMethod: z.enum(['CASH', 'CARD_ON_DELIVERY', 'CARD_ON_PICKUP']),
+  kitchenNote: z.string().trim().max(500, 'Poznámka je príliš dlhá').optional(),
+  items: z.array(orderItemSchema).min(1, 'Objednávka musí obsahovať aspoň jednu položku').max(50, 'Príliš veľa položiek'),
+}
+
+// Discriminated union by orderType
+// DELIVERY requires zone + address; PICKUP must NOT include delivery fields.
+// SCHEDULED_* removed: not implemented end-to-end.
+export const createOrderSchema = z.discriminatedUnion('orderType', [
+  z.object({
+    ...orderBase,
+    orderType: z.literal('DELIVERY'),
+    deliveryZoneId: z.string().min(1, 'Zóna doručenia je povinná').max(100),
+    deliveryAddressLine1: z.string().trim().min(1, 'Adresa je povinná').max(200, 'Adresa je príliš dlhá'),
+    deliveryCity: z.string().trim().min(1, 'Mesto je povinné').max(100, 'Mesto je príliš dlhé'),
+    deliveryNote: z.string().trim().max(500, 'Poznámka je príliš dlhá').optional(),
+  }),
+  z.object({
+    ...orderBase,
+    orderType: z.literal('PICKUP'),
+    // PICKUP must NOT include delivery fields — reject them explicitly
+    deliveryZoneId: z.undefined().optional(),
+    deliveryAddressLine1: z.undefined().optional(),
+    deliveryCity: z.undefined().optional(),
+    deliveryNote: z.undefined().optional(),
+  }),
+])
+
+// ─── Order status update ───
+// NOTE: changedByUserId is INTENTIONALLY REMOVED — actor identity always comes
+// from the session (authResult.user.id). See P0-4 audit spoofing fix.
 export const updateOrderStatusSchema = z.object({
   status: z.enum([
     'NEW', 'ACCEPTED', 'IN_KITCHEN', 'PREPARING', 'READY',
     'WAITING_FOR_COURIER', 'ASSIGNED_TO_COURIER', 'PICKED_UP',
     'ON_THE_WAY', 'DELIVERED', 'CANCELLED', 'REFUNDED',
   ], { error: 'Neplatný stav' }),
-  changedByUserId: z.string().optional(),
-  reason: z.string().optional(),
+  reason: z.string().trim().max(500, 'Dôvod je príliš dlhý').optional(),
+  // Optimistic concurrency: client sends the status it believes is current.
+  expectedStatus: z.enum([
+    'NEW', 'ACCEPTED', 'IN_KITCHEN', 'PREPARING', 'READY',
+    'WAITING_FOR_COURIER', 'ASSIGNED_TO_COURIER', 'PICKED_UP',
+    'ON_THE_WAY', 'DELIVERED', 'CANCELLED', 'REFUNDED',
+  ]).optional(),
 })
 
 // ─── Dispatch Schema ───
-
+// NOTE: assignedByUserId is INTENTIONALLY REMOVED — actor identity always comes
+// from the session (authResult.user.id). See P0-4 audit spoofing fix.
 export const dispatchSchema = z.object({
-  orderId: z.string().min(1, 'ID objednávky je povinné'),
-  courierId: z.string().min(1, 'ID kuriéra je povinné'),
-  assignedByUserId: z.string().optional(),
+  orderId: z.string().min(1, 'ID objednávky je povinné').max(100),
+  courierId: z.string().min(1, 'ID kuriéra je povinné').max(100),
 })
 
 // ─── Courier Schemas ───
 
 export const updateCourierStatusSchema = z.object({
-  courierId: z.string().min(1, 'ID kuriéra je povinné'),
+  courierId: z.string().min(1, 'ID kuriéra je povinné').max(100),
   status: z.enum(['OFFLINE', 'AVAILABLE', 'ASSIGNED', 'PICKING_UP', 'DELIVERING', 'BREAK'], {
     error: 'Neplatný stav kuriéra',
   }),
 })
 
 export const createCourierSchema = z.object({
-  displayName: z.string().min(1, 'Meno kuriéra je povinné'),
-  email: z.email('Neplatný email').optional().nullable().or(z.literal('')),
-  phone: z.string().optional().nullable(),
-  password: z.string().min(6, 'Heslo musí mať aspoň 6 znakov'),
+  displayName: z.string().trim().min(1, 'Meno kuriéra je povinné').max(100),
+  email: z.string().trim().toLowerCase().email('Neplatný email').max(200).nullable().or(z.literal('')),
+  phone: phoneSchema.nullable().optional(),
+  password: z.string().min(8, 'Heslo musí mať aspoň 8 znakov').max(1000),
   vehicleType: z.enum(['BICYCLE', 'SCOOTER', 'CAR']).optional(),
-  profilePhotoUrl: z.string().optional().nullable(),
-  licensePlate: z.string().optional().nullable(),
+  profilePhotoUrl: urlSchema,
+  licensePlate: z.string().trim().max(50).nullable().optional(),
   status: z.enum(['OFFLINE', 'AVAILABLE', 'ASSIGNED', 'PICKING_UP', 'DELIVERING', 'BREAK']).optional(),
   isActive: z.boolean().optional(),
 })
 
 export const updateCourierSchema = z.object({
-  courierId: z.string().min(1, 'ID kuriéra je povinné'),
-  displayName: z.string().min(1, 'Meno kuriéra je povinné').optional(),
-  email: z.email('Neplatný email').optional().nullable().or(z.literal('')),
-  phone: z.string().optional().nullable(),
-  password: z.string().min(6, 'Heslo musí mať aspoň 6 znakov').optional().or(z.literal('')),
+  courierId: z.string().min(1, 'ID kuriéra je povinné').max(100),
+  displayName: z.string().trim().min(1, 'Meno kuriéra je povinné').max(100).optional(),
+  email: z.string().trim().toLowerCase().email('Neplatný email').max(200).nullable().or(z.literal('')).optional(),
+  phone: z.string().transform(normalizePhone).nullable().optional(),
+  // Password change requires currentPassword when changing own password
+  currentPassword: z.string().max(1000).optional(),
+  password: z.string().min(8, 'Heslo musí mať aspoň 8 znakov').max(1000).optional().or(z.literal('')),
   vehicleType: z.enum(['BICYCLE', 'SCOOTER', 'CAR']).optional(),
-  profilePhotoUrl: z.string().optional().nullable(),
-  licensePlate: z.string().optional().nullable(),
+  profilePhotoUrl: urlSchema,
+  licensePlate: z.string().trim().max(50).nullable().optional(),
   status: z.enum(['OFFLINE', 'AVAILABLE', 'ASSIGNED', 'PICKING_UP', 'DELIVERING', 'BREAK']).optional(),
   isActive: z.boolean().optional(),
 })
@@ -84,40 +160,40 @@ export const updateCourierSchema = z.object({
 // ─── Menu / Category Schemas ───
 
 export const createCategorySchema = z.object({
-  slug: z.string().min(1, 'Slug je povinný'),
-  name: z.string().min(1, 'Názov je povinný'),
-  description: z.string().optional().nullable(),
-  sortOrder: z.number().int().optional(),
+  slug: z.string().trim().min(1, 'Slug je povinný').max(100),
+  name: z.string().trim().min(1, 'Názov je povinný').max(200),
+  description: z.string().trim().max(1000).nullable().optional(),
+  sortOrder: z.number().int().min(0).max(10000).optional(),
   isActive: z.boolean().optional(),
   isDailyMenu: z.boolean().optional(),
-  imageUrl: z.string().optional().nullable(),
+  imageUrl: urlSchema,
 })
 
 export const createMenuItemSchema = z.object({
-  categoryId: z.string().min(1, 'ID kategórie je povinné'),
-  slug: z.string().min(1, 'Slug je povinný'),
-  name: z.string().min(1, 'Názov je povinný'),
-  description: z.string().optional().nullable(),
-  basePrice: z.number().min(0, 'Cena musí byť nezáporná'),
-  imageUrl: z.string().optional().nullable(),
+  categoryId: z.string().min(1, 'ID kategórie je povinné').max(100),
+  slug: z.string().trim().min(1, 'Slug je povinný').max(100),
+  name: z.string().trim().min(1, 'Názov je povinný').max(200),
+  description: z.string().trim().max(1000).nullable().optional(),
+  basePrice: z.number().min(0, 'Cena musí byť nezáporná').max(10000, 'Príliš vysoká cena'),
+  imageUrl: urlSchema,
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   isAvailable: z.boolean().optional(),
-  preparationTimeMinutes: z.number().int().min(0).optional().nullable(),
+  preparationTimeMinutes: z.number().int().min(0).max(600).nullable().optional(),
 })
 
 export const updateMenuItemSchema = z.object({
-  id: z.string().min(1, 'ID je povinné'),
-  categoryId: z.string().optional(),
-  slug: z.string().optional(),
-  name: z.string().optional(),
-  description: z.string().optional().nullable(),
-  basePrice: z.number().min(0, 'Cena musí byť nezáporná').optional(),
-  imageUrl: z.string().optional().nullable(),
+  id: z.string().min(1, 'ID je povinné').max(100),
+  categoryId: z.string().max(100).optional(),
+  slug: z.string().trim().max(100).optional(),
+  name: z.string().trim().max(200).optional(),
+  description: z.string().trim().max(1000).nullable().optional(),
+  basePrice: z.number().min(0, 'Cena musí byť nezáporná').max(10000).optional(),
+  imageUrl: urlSchema,
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   isAvailable: z.boolean().optional(),
-  preparationTimeMinutes: z.number().int().min(0).optional().nullable(),
+  preparationTimeMinutes: z.number().int().min(0).max(600).nullable().optional(),
 })
 
 // ─── Settings Schema ───
@@ -126,21 +202,32 @@ export const updateSettingsSchema = z.object({
   deliveryEnabled: z.boolean().optional(),
   pickupEnabled: z.boolean().optional(),
   isOpen: z.boolean().optional(),
-  customerMessage: z.string().optional().nullable(),
-  averagePrepMinutes: z.number().int().min(1).optional(),
-  minimumOrderAmount: z.number().min(0).optional(),
-  storePhone: z.string().optional().nullable(),
-  storeAddress: z.string().optional().nullable(),
+  customerMessage: z.string().trim().max(1000).nullable().optional(),
+  averagePrepMinutes: z.number().int().min(1).max(600).optional(),
+  minimumOrderAmount: z.number().min(0).max(10000).optional(),
+  storePhone: z.string().trim().max(50).nullable().optional(),
+  storeAddress: z.string().trim().max(500).nullable().optional(),
 })
 
 // ─── Opening Hours Schema ───
 
 export const openingHoursItemSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
-  openTime: z.string().optional().nullable(),
-  closeTime: z.string().optional().nullable(),
+  openTime: hhMmSchema,
+  closeTime: hhMmSchema,
   isClosed: z.boolean().optional(),
-})
+}).refine(
+  (data) => {
+    // If closed, times can be null
+    if (data.isClosed) return true
+    // If not closed, both times must be present
+    if (!data.openTime || !data.closeTime) return false
+    // openTime < closeTime OR closeTime < openTime (overnight interval)
+    // Both are valid; we just need them to be different
+    return data.openTime !== data.closeTime
+  },
+  { message: 'Časy otvorenia a zatvorenia musia byť rôzne (alebo označte ako zatvorené).' }
+)
 
 export const updateOpeningHoursSchema = z.array(openingHoursItemSchema)
 
@@ -158,15 +245,19 @@ export function validateBody<T>(schema: z.ZodType<T>, data: unknown): { data: T 
       const firstError = err.issues[0]
       return {
         error: NextResponse.json(
-          { error: firstError?.message || 'Neplatné údaje', details: err.issues.map(i => i.message) },
-          { status: 400 }
+          {
+            code: 'INVALID_REQUEST',
+            message: firstError?.message || 'Neplatné údaje',
+            details: { issues: err.issues.map((i) => ({ path: i.path, message: i.message })) },
+          },
+          { status: 400, headers: { 'Cache-Control': 'private, no-store, max-age=0' } }
         ),
       }
     }
     return {
       error: NextResponse.json(
-        { error: 'Neplatné údaje' },
-        { status: 400 }
+        { code: 'INVALID_REQUEST', message: 'Neplatné údaje' },
+        { status: 400, headers: { 'Cache-Control': 'private, no-store, max-age=0' } }
       ),
     }
   }

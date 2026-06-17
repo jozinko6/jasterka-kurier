@@ -3,8 +3,24 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
+/**
+ * ⚠️  DEVELOPMENT/TEST SEED ONLY
+ *
+ * This seed creates accounts with well-known weak passwords (admin123, etc.)
+ * It MUST NOT run in production. The guard below blocks production runs.
+ *
+ * For production bootstrap, use scripts/create-admin.ts with the
+ * ADMIN_BOOTSTRAP_PASSWORD environment variable.
+ */
 async function main() {
-  console.log('🌱 Seeding database for Pizza Jašterka...')
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Seed script refuses to run in production. Use scripts/create-admin.ts with ADMIN_BOOTSTRAP_PASSWORD env var.'
+    )
+  }
+
+  console.log('🌱 Seeding database for Pizza Jašterka (DEVELOPMENT)...')
+  console.log('⚠️  Using weak demo passwords — DO NOT use in production!')
 
   // ─── Clean up ───
   await prisma.kitchenEvent.deleteMany()
@@ -641,9 +657,10 @@ async function main() {
     ],
   })
 
-  // ─── Restaurant Settings ───
+  // ─── Restaurant Settings (singleton with id='main') ───
   await prisma.restaurantSettings.create({
     data: {
+      id: 'main',
       deliveryEnabled: true,
       pickupEnabled: true,
       isOpen: true,

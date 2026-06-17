@@ -53,6 +53,22 @@ export const useAuthStore = create<AuthState>()((set) => ({
     } catch {
       // Ignore logout API errors.
     }
+    // Signal all service workers to purge caches so no personal data survives
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        for (const reg of regs) {
+          reg.active?.postMessage({ type: 'LOGOUT' })
+        }
+        // Also clear caches directly (belt-and-suspenders)
+        if ('caches' in window) {
+          const keys = await caches.keys()
+          await Promise.all(keys.map((k) => caches.delete(k)))
+        }
+      } catch {
+        // SW not available — ignore
+      }
+    }
     set({ user: null, isAuthenticated: false })
   },
 
