@@ -77,8 +77,8 @@ export function conflict(message: string, details?: Record<string, unknown>): Ne
  * the safe Slovak message is returned.
  */
 export function withErrorHandler<TArgs extends unknown[]>(
-  handler: (...args: TArgs) => Promise<NextResponse>
-): (...args: TArgs) => Promise<NextResponse> {
+  handler: (...args: TArgs) => Promise<Response>
+): (...args: TArgs) => Promise<Response> {
   return async (...args: TArgs) => {
     try {
       return await handler(...args)

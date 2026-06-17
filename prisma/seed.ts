@@ -668,6 +668,221 @@ async function main() {
     ],
   })
 
+  // ─── Remuneration plan (default sadzobník) ───
+  const defaultPlan = await prisma.remunerationPlan.create({
+    data: {
+      name: 'Štandardný sadzobník 2025',
+      description: 'Základný sadzobník pre všetkých kuriérov',
+      currency: 'EUR',
+      isActive: true,
+    },
+  })
+
+  const planVersion1 = await prisma.remunerationPlanVersion.create({
+    data: {
+      planId: defaultPlan.id,
+      versionNumber: 1,
+      effectiveFrom: new Date('2025-01-01'),
+      rulesSnapshot: JSON.stringify({
+        deliveryBase: 150,
+        pickupFee: 50,
+        dropoffFee: 50,
+        perKm: 20,
+        weekendBonus: 100,
+        peakBonus: 150,
+      }),
+      createdByUserId: adminUser.id,
+    },
+  })
+  void planVersion1 // referenced for future migrations
+
+  // Remuneration rules
+  const ruleData: Array<{
+    ruleType: string
+    valueType: string
+    valueCents: number
+    priority: number
+  }> = [
+    { ruleType: 'DELIVERY_BASE', valueType: 'FIXED_CENTS', valueCents: 150, priority: 1 },
+    { ruleType: 'PICKUP_FEE', valueType: 'FIXED_CENTS', valueCents: 50, priority: 1 },
+    { ruleType: 'DROPOFF_FEE', valueType: 'FIXED_CENTS', valueCents: 50, priority: 1 },
+    { ruleType: 'PER_KILOMETER', valueType: 'PER_KILOMETER_CENTS', valueCents: 20, priority: 1 },
+    { ruleType: 'MINIMUM_PER_ORDER', valueType: 'FIXED_CENTS', valueCents: 200, priority: 1 },
+    { ruleType: 'WEEKEND_BONUS', valueType: 'FIXED_CENTS', valueCents: 100, priority: 1 },
+    { ruleType: 'HOLIDAY_BONUS', valueType: 'FIXED_CENTS', valueCents: 200, priority: 1 },
+    { ruleType: 'CANCELLATION_COMPENSATION', valueType: 'FIXED_CENTS', valueCents: 100, priority: 1 },
+  ]
+
+  for (const rule of ruleData) {
+    await prisma.remunerationRule.create({
+      data: {
+        planId: defaultPlan.id,
+        ruleType: rule.ruleType as never,
+        valueType: rule.valueType as never,
+        valueCents: rule.valueCents,
+        priority: rule.priority,
+        active: true,
+      },
+    })
+  }
+
+  // Zone compensation rules
+  for (const zone of [zoneCentrum, zoneSirsieCentrum]) {
+    await prisma.zoneCompensationRule.create({
+      data: {
+        planId: defaultPlan.id,
+        zoneId: zone.id,
+        bonusCents: zone.name.includes('centrum') && !zone.name.includes('širšie') ? 30 : 50,
+        active: true,
+      },
+    })
+  }
+
+  // Peak period: Friday and Saturday 17:00-21:00
+  for (const dayOfWeek of [5, 6]) {
+    await prisma.peakPeriodRule.create({
+      data: {
+        planId: defaultPlan.id,
+        dayOfWeek,
+        startTime: '17:00',
+        endTime: '21:00',
+        bonusCents: 150,
+        active: true,
+      },
+    })
+  }
+
+  // ─── Courier compensation profiles ───
+  // Bike courier: AGREEMENT (dohodar), weekly payouts
+  await prisma.courierCompensationProfile.create({
+    data: {
+      courierId: courierBike.id,
+      contractType: 'AGREEMENT',
+      agreementType: 'WORK_ACTIVITY',
+      payoutFrequency: 'WEEKLY',
+      preferredPayoutWeekday: 4, // Thursday
+      remunerationPlanId: defaultPlan.id,
+      individualRateOverrideEnabled: false,
+      validFrom: new Date('2025-01-01'),
+      active: true,
+      createdByUserId: adminUser.id,
+    },
+  })
+
+  await prisma.courierAgreementProfile.create({
+    data: {
+      courierId: courierBike.id,
+      agreementType: 'WORK_ACTIVITY',
+      contractNumber: 'DOH-2025-001',
+      validFrom: new Date('2025-01-01'),
+      weeklyHourLimit: 20,
+      annualHourLimit: 300,
+      payrollExportCode: 'BIKE-001',
+    },
+  })
+
+  // Set active compensation profile on courier
+  const bikeProfile = await prisma.courierCompensationProfile.findFirst({
+    where: { courierId: courierBike.id },
+    select: { id: true },
+  })
+  if (bikeProfile) {
+    await prisma.courier.update({
+      where: { id: courierBike.id },
+      data: { activeCompensationProfileId: bikeProfile.id },
+    })
+  }
+
+  // Car courier: SELF_EMPLOYED (živnostník), biweekly payouts
+  await prisma.courierCompensationProfile.create({
+    data: {
+      courierId: courierCar.id,
+      contractType: 'SELF_EMPLOYED',
+      payoutFrequency: 'BIWEEKLY',
+      payoutAnchorDate: new Date('2025-01-06'), // First Monday of 2025
+      preferredPayoutWeekday: 4, // Thursday
+      remunerationPlanId: defaultPlan.id,
+      individualRateOverrideEnabled: true,
+      validFrom: new Date('2025-01-01'),
+      active: true,
+      createdByUserId: adminUser.id,
+    },
+  })
+
+  await prisma.courierBusinessProfile.create({
+    data: {
+      courierId: courierCar.id,
+      businessName: 'Peter Auto - preprava',
+      legalName: 'Peter Auto s.r.o.',
+      street: 'Hlavná 99',
+      city: 'Hlohovec',
+      postalCode: '920 01',
+      countryCode: 'SK',
+      companyId: '12345678',
+      taxId: '1020304050',
+      vatId: 'SK1020304050',
+      vatStatus: 'VAT_PAYER',
+      ibanEncrypted: null, // Will be set by admin in production
+      ibanLast4: '1234',
+      swift: 'TATRSKBX',
+      invoiceEmail: 'fakturacia@peterauto.sk',
+      selfBillingEnabled: false, // Will be enabled after agreement
+    },
+  })
+
+  const carProfile = await prisma.courierCompensationProfile.findFirst({
+    where: { courierId: courierCar.id },
+    select: { id: true },
+  })
+  if (carProfile) {
+    await prisma.courier.update({
+      where: { id: courierCar.id },
+      data: { activeCompensationProfileId: carProfile.id },
+    })
+  }
+
+  // ─── Self-billing agreement template (must be approved before use) ───
+  await prisma.selfBillingAgreementTemplate.create({
+    data: {
+      version: '1.0',
+      contentJson: JSON.stringify({
+        title: 'Dohoda o vyhotovovaní faktúr odberateľom',
+        sections: [
+          {
+            heading: '1. Zmluvné strany',
+            text: 'Odberateľ: Pizza Jašterka, prevádzkovateľ. Dodávateľ: kuriér (živnostník).',
+          },
+          {
+            heading: '2. Predmet dohody',
+            text: 'Odberateľ je oprávnený vystavovať v mene dodávateľa faktúry za dodané služby v zmysle § 71 ods. 1 zákona č. 222/2004 Z.z. o DPH.',
+          },
+          {
+            heading: '3. Číslovanie faktúr',
+            text: 'Faktúry budú číslované sekvenčne v tvare SBI-RRRR-NNNN.',
+          },
+          {
+            heading: '4. Doručenie faktúr',
+            text: 'Faktúry budú doručované prostredníctvom kuriérskej aplikácie a e-mailu.',
+          },
+          {
+            heading: '5. Lehota na námietky',
+            text: 'Dodávateľ má právo uplatniť námietky do 7 dní od doručenia faktúry.',
+          },
+          {
+            heading: '6. Oprava faktúr',
+            text: 'Oprava faktúry sa vykoná výhradne opravným dokladom.',
+          },
+          {
+            heading: '7. Platnosť dohody',
+            text: 'Dohoda je uzavretá na dobu neurčitú a môže byť ukončená písomným oznámením s 30-dňovou lehotou.',
+          },
+        ],
+        note: 'Tento text je šablona a pred produkčným použitím musí byť schválený právnikom alebo účtovníkom.',
+      }),
+      isActive: false, // Not approved yet
+    },
+  })
+
   console.log('✅ Seed complete!')
   console.log(`   Users: ${await prisma.user.count()}`)
   console.log(`   Categories: ${await prisma.menuCategory.count()}`)

@@ -7,6 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
 // ─── Enums (SQLite: stored as strings) ───
 
 enum UserRole {
@@ -76,6 +77,161 @@ enum MenuItemOptionType {
   REMOVE
 }
 
+// ─── Courier financial domain enums ───
+
+enum CourierContractType {
+  AGREEMENT
+  SELF_EMPLOYED
+}
+
+enum CourierAgreementType {
+  WORK_ACTIVITY
+  STUDENT
+  TASK_BASED
+}
+
+enum PayoutFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum VatStatus {
+  NOT_REGISTERED
+  VAT_PAYER
+  OTHER
+}
+
+enum SelfBillingAgreementStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  TERMINATED
+}
+
+enum EarningEntryType {
+  DELIVERY_BASE
+  PICKUP_FEE
+  DROPOFF_FEE
+  PICKUP_DISTANCE
+  DELIVERY_DISTANCE
+  ZONE_BONUS
+  PEAK_BONUS
+  WEEKEND_BONUS
+  HOLIDAY_BONUS
+  WEATHER_BONUS
+  WAITING_FEE
+  MULTI_ORDER_BONUS
+  CANCELLATION_COMPENSATION
+  HOURLY_GUARANTEE
+  TIP
+  MANUAL_BONUS
+  MANUAL_ADJUSTMENT
+  REVERSAL
+  LEGACY_IMPORT
+}
+
+enum EarningEntryStatus {
+  PENDING
+  CONFIRMED
+  REVERSED
+}
+
+enum CashEntryType {
+  CASH_COLLECTED
+  CASH_HANDED_OVER
+  CASH_ADJUSTMENT
+}
+
+enum PayoutPeriodStatus {
+  OPEN
+  CALCULATED
+  LOCKED
+  APPROVED
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum RemunerationRuleType {
+  DELIVERY_BASE
+  PICKUP_FEE
+  DROPOFF_FEE
+  PER_KILOMETER
+  COURIER_TO_STORE_DISTANCE
+  STORE_TO_CUSTOMER_DISTANCE
+  MINIMUM_PER_ORDER
+  ZONE_BONUS
+  PEAK_BONUS
+  WEEKEND_BONUS
+  HOLIDAY_BONUS
+  WEATHER_BONUS
+  WAITING_FEE
+  MULTI_ORDER_BONUS
+  CANCELLATION_COMPENSATION
+  HOURLY_GUARANTEE
+  MANUAL_BONUS
+  MANUAL_ADJUSTMENT
+}
+
+enum RuleValueType {
+  FIXED_CENTS
+  PERCENT_BASIS_POINTS
+  PER_KILOMETER_CENTS
+}
+
+enum SelfBillingInvoiceStatus {
+  DRAFT
+  ISSUED
+  DELIVERED
+  ACCEPTED
+  REJECTED
+  VOID
+  CORRECTED
+}
+
+enum AgreementStatementStatus {
+  DRAFT
+  ISSUED
+  DELIVERED
+  ACCEPTED
+  REJECTED
+  PAID
+  VOID
+}
+
+enum WorkSessionStatus {
+  ACTIVE
+  ENDED
+  PAUSED
+}
+
+enum PayoutBatchStatus {
+  DRAFT
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum CourierAuditAction {
+  CONTRACT_TYPE_CHANGE
+  PAYOUT_FREQUENCY_CHANGE
+  REMUNERATION_PLAN_CHANGE
+  MANUAL_ADJUSTMENT
+  PERIOD_LOCK
+  PERIOD_UNLOCK
+  PAYOUT_APPROVE
+  PAYOUT_MARK_PAID
+  IBAN_CHANGE
+  INVOICE_CREATE
+  INVOICE_VOID
+  SELF_BILLING_AGREEMENT_CREATE
+  SELF_BILLING_AGREEMENT_TERMINATE
+}
+
 // ─── Models (SQLite - no @map snake_case, no @db.Decimal) ───
 
 model User {
@@ -94,6 +250,21 @@ model User {
   deliveryAssignments DeliveryAssignment[] @relation("AssignmentActor")
   kitchenEvents      KitchenEvent[]
   sessions           AuthSession[]
+
+  // ── Financial domain back-relations ──
+  compensationProfilesCreated  CourierCompensationProfile[]  @relation("CompensationProfileCreator")
+  businessProfilesVerified     CourierBusinessProfile[]      @relation("BusinessProfileVerifier")
+  selfBillingAgreementsCreated SelfBillingAgreement[]        @relation("SelfBillingAgreementCreator")
+  selfBillingTemplatesApproved SelfBillingAgreementTemplate[] @relation("SelfBillingTemplateApprover")
+  remunerationVersionsCreated  RemunerationPlanVersion[]     @relation("RemunerationVersionCreator")
+  rateOverridesCreated         CourierRateOverride[]         @relation("RateOverrideCreator")
+  earningEntriesCreated        EarningLedgerEntry[]          @relation("EarningEntryCreator")
+  cashEntriesConfirmed         CashLedgerEntry[]             @relation("CashEntryConfirmer")
+  payoutsApproved              PayoutPeriod[]                @relation("PayoutApprover")
+  payoutBatchesCreated         PayoutBatch[]                 @relation("PayoutBatchCreator")
+  selfBillingInvoicesCreated   SelfBillingInvoice[]          @relation("SelfBillingInvoiceCreator")
+  agreementStatementsCreated   AgreementEarningsStatement[]  @relation("StatementCreator")
+  courierAuditActions          CourierAuditLog[]             @relation("CourierAuditActor")
 }
 
 model AuthSession {
@@ -141,6 +312,23 @@ model Courier {
   assignments      DeliveryAssignment[]
   earnings         CourierEarning[]
   activeOrderCount Int              @default(0)
+
+  // ── Financial domain relations ──
+  compensationProfiles           CourierCompensationProfile[]
+  activeCompensationProfileId    String?  @unique
+  activeCompensationProfile      CourierCompensationProfile?   @relation("ActiveCompensationProfile", fields: [activeCompensationProfileId], references: [id], onDelete: SetNull)
+  agreementProfile               CourierAgreementProfile?
+  businessProfile                CourierBusinessProfile?
+  selfBillingAgreements          SelfBillingAgreement[]
+  earningLedger                  EarningLedgerEntry[]
+  cashLedger                     CashLedgerEntry[]
+  payoutPeriods                  PayoutPeriod[]
+  workSessions                   WorkSession[]
+  selfBillingInvoices            SelfBillingInvoice[]
+  agreementStatements            AgreementEarningsStatement[]
+  rateOverrides                  CourierRateOverride[]
+  auditLogs                      CourierAuditLog[]
+  remunerationSnapshots          OrderRemunerationSnapshot[]
 }
 
 model MenuCategory {
@@ -230,6 +418,9 @@ model Order {
   assignments          DeliveryAssignment[]
   earnings             CourierEarning[]
   kitchenEvents        KitchenEvent[]
+  remunerationSnapshot OrderRemunerationSnapshot?
+  earningLedgerEntries EarningLedgerEntry[]
+  cashLedgerEntries    CashLedgerEntry[]
 }
 
 model OrderItem {
@@ -278,6 +469,7 @@ model DeliveryZone {
   orders      Order[]
   assignments DeliveryAssignment[]
   earnings    CourierEarning[]
+  zoneCompensationRules ZoneCompensationRule[]
 }
 
 model DeliveryAssignment {
@@ -357,4 +549,480 @@ model OpeningHours {
   updatedAt  DateTime @updatedAt
 
   @@unique([dayOfWeek])
+}
+
+// ════════════════════════════════════════════════════════════════
+// COURIER FINANCIAL DOMAIN
+// All monetary values stored as integer cents (Int).
+// ════════════════════════════════════════════════════════════════
+
+// ─── Compensation profile (versioned contract terms) ───
+
+model CourierCompensationProfile {
+  id                          String              @id @default(cuid())
+  courierId                   String
+  contractType                CourierContractType
+  agreementType               CourierAgreementType?
+  payoutFrequency             PayoutFrequency
+  payoutAnchorDate            DateTime?
+  preferredPayoutWeekday      Int?                // 0=Sun ... 6=Sat
+  monthlyPayoutDay            Int?                // 1..31
+  remunerationPlanId          String?
+  individualRateOverrideEnabled Boolean            @default(false)
+  validFrom                   DateTime
+  validTo                     DateTime?
+  active                      Boolean             @default(true)
+  createdByUserId             String?
+  createdAt                   DateTime            @default(now())
+  updatedAt                   DateTime            @updatedAt
+
+  courier                     Courier             @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  remunerationPlan            RemunerationPlan?   @relation(fields: [remunerationPlanId], references: [id], onDelete: Restrict)
+  courierActiveProfile        Courier?            @relation("ActiveCompensationProfile")
+  createdByUser               User?               @relation("CompensationProfileCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([courierId])
+  @@index([active])
+}
+
+// ─── Agreement-specific profile (dohodár) ───
+
+model CourierAgreementProfile {
+  id                  String   @id @default(cuid())
+  courierId           String   @unique
+  agreementType       CourierAgreementType
+  contractNumber      String?
+  validFrom           DateTime?
+  validTo             DateTime?
+  weeklyHourLimit     Int?
+  annualHourLimit     Int?
+  payrollEmployeeNumber String?
+  payrollExportCode   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  courier             Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+}
+
+// ─── Self-employed business profile (živnostník) ───
+
+model CourierBusinessProfile {
+  id                    String    @id @default(cuid())
+  courierId             String    @unique
+  businessName          String
+  legalName             String
+  street                String
+  city                  String
+  postalCode            String
+  countryCode           String    @default("SK")
+  companyId             String?   // IČO
+  taxId                 String?   // DIČ
+  vatId                 String?   // IČ DPH
+  vatStatus             VatStatus @default(NOT_REGISTERED)
+  ibanEncrypted         String?   // AES-256-GCM ciphertext, base64
+  ibanLast4             String?
+  swift                 String?
+  businessRegisterText  String?
+  invoiceEmail          String?
+  selfBillingEnabled    Boolean   @default(false)
+  selfBillingAgreementId String?
+  verifiedAt            DateTime?
+  verifiedByUserId      String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  courier               Courier   @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  verifiedBy            User?     @relation("BusinessProfileVerifier", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+}
+
+// ─── Self-billing agreement (dohoda o samofakturácii) ───
+
+model SelfBillingAgreement {
+  id                String                     @id @default(cuid())
+  courierId         String
+  agreementNumber   String                     @unique
+  validFrom         DateTime
+  validTo           DateTime?
+  status            SelfBillingAgreementStatus @default(DRAFT)
+  termsVersion      String
+  termsSnapshot     String                     // JSON
+  acceptanceMethod  String                     @default("WEB_FORM")
+  acceptedAt        DateTime?
+  acceptedIpHash    String?
+  acceptedUserAgent String?
+  createdByUserId   String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  courier           Courier                    @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  invoices          SelfBillingInvoice[]
+  createdByUser     User?                      @relation("SelfBillingAgreementCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([courierId])
+}
+
+model SelfBillingAgreementTemplate {
+  id              String   @id @default(cuid())
+  version         String   @unique
+  contentJson     String   // JSON with structured legal text blocks
+  isActive        Boolean  @default(false)
+  approvedByUserId String?
+  approvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  approvedBy      User?    @relation("SelfBillingTemplateApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+}
+
+// ─── Remuneration plans (versioned rate cards) ───
+
+model RemunerationPlan {
+  id          String                   @id @default(cuid())
+  name        String
+  description String?
+  currency    String                   @default("EUR")
+  isActive    Boolean                  @default(true)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  versions    RemunerationPlanVersion[]
+  rules       RemunerationRule[]
+  zoneRules   ZoneCompensationRule[]
+  peakRules   PeakPeriodRule[]
+  compensationProfiles CourierCompensationProfile[]
+}
+
+model RemunerationPlanVersion {
+  id              String   @id @default(cuid())
+  planId          String
+  versionNumber   Int
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  rulesSnapshot   String   // JSON snapshot of all rules at this version
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  plan            RemunerationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdByUser   User?            @relation("RemunerationVersionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  ledgerEntries   EarningLedgerEntry[]
+  orderSnapshots  OrderRemunerationSnapshot[]
+
+  @@unique([planId, versionNumber])
+  @@index([planId])
+}
+
+model RemunerationRule {
+  id              String             @id @default(cuid())
+  planId          String
+  ruleType        RemunerationRuleType
+  valueType       RuleValueType
+  valueCents      Int                @default(0)    // for FIXED_CENTS or PER_KILOMETER_CENTS
+  valueBasisPoints Int               @default(0)    // for PERCENT_BASIS_POINTS (1 bp = 0.01%)
+  conditionJson   String?
+  priority        Int                @default(0)
+  active          Boolean            @default(true)
+  validFrom       DateTime           @default(now())
+  validTo         DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  plan            RemunerationPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, ruleType])
+}
+
+model CourierRateOverride {
+  id              String             @id @default(cuid())
+  courierId       String
+  ruleType        RemunerationRuleType
+  valueType       RuleValueType
+  valueCents      Int                @default(0)
+  valueBasisPoints Int               @default(0)
+  conditionJson   String?
+  validFrom       DateTime           @default(now())
+  validTo         DateTime?
+  active          Boolean            @default(true)
+  createdByUserId String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  courier         Courier            @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  createdByUser   User?              @relation("RateOverrideCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([courierId, ruleType])
+  @@index([courierId])
+}
+
+model ZoneCompensationRule {
+  id          String   @id @default(cuid())
+  planId      String
+  zoneId      String
+  bonusCents  Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  plan        RemunerationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  zone        DeliveryZone     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, zoneId])
+}
+
+model PeakPeriodRule {
+  id            String   @id @default(cuid())
+  planId        String
+  dayOfWeek     Int      // 0=Sun ... 6=Sat
+  startTime     String   // HH:mm
+  endTime       String   // HH:mm (can be < startTime for overnight)
+  bonusCents    Int      @default(0)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  plan          RemunerationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+}
+
+// ─── Per-order remuneration snapshot (immutable) ───
+
+model OrderRemunerationSnapshot {
+  id                        String   @id @default(cuid())
+  orderId                   String   @unique
+  courierId                 String
+  remunerationPlanVersionId String
+  planSnapshotJson          String   // full snapshot of rules used
+  estimatedTotalCents       Int      @default(0)
+  actualTotalCents          Int?
+  calculatedAt              DateTime @default(now())
+  createdAt                 DateTime @default(now())
+
+  order                     Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courier                   Courier                 @relation(fields: [courierId], references: [id], onDelete: Restrict)
+  remunerationPlanVersion   RemunerationPlanVersion @relation(fields: [remunerationPlanVersionId], references: [id], onDelete: Restrict)
+
+  @@index([courierId])
+}
+
+// ─── Earning ledger (immutable accounting book) ───
+
+model EarningLedgerEntry {
+  id                       String             @id @default(cuid())
+  courierId                String
+  orderId                  String?
+  assignmentId             String?
+  workSessionId            String?
+  payoutPeriodId           String?
+  type                     EarningEntryType
+  amountCents              Int
+  currency                 String             @default("EUR")
+  description              String?
+  calculationMetadataJson  String?            // JSON
+  remunerationPlanVersionId String?
+  sourceEntryId            String?            // for reversal / correction
+  status                   EarningEntryStatus @default(PENDING)
+  occurredAt               DateTime
+  confirmedAt              DateTime?
+  createdByUserId          String?
+  idempotencyKey           String             @unique
+  createdAt                DateTime           @default(now())
+
+  courier                  Courier            @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  order                    Order?             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  workSession              WorkSession?       @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+  payoutPeriod             PayoutPeriod?      @relation(fields: [payoutPeriodId], references: [id], onDelete: SetNull)
+  remunerationPlanVersion  RemunerationPlanVersion? @relation(fields: [remunerationPlanVersionId], references: [id], onDelete: Restrict)
+  createdByUser            User?              @relation("EarningEntryCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([courierId, occurredAt])
+  @@index([courierId, status])
+  @@index([orderId])
+  @@index([payoutPeriodId])
+}
+
+// ─── Cash ledger (cash collected from customers, separate from earnings) ───
+
+model CashLedgerEntry {
+  id                 String         @id @default(cuid())
+  courierId          String
+  orderId            String?
+  type               CashEntryType
+  amountCents        Int
+  balanceAfterCents  Int            @default(0)
+  note               String?
+  confirmedByUserId  String?
+  occurredAt         DateTime       @default(now())
+  createdAt          DateTime       @default(now())
+
+  courier            Courier        @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  order              Order?         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  confirmedBy        User?          @relation("CashEntryConfirmer", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([courierId, occurredAt])
+  @@index([orderId])
+}
+
+// ─── Work session (pracovný čas) ───
+
+model WorkSession {
+  id           String           @id @default(cuid())
+  courierId    String
+  status       WorkSessionStatus @default(ACTIVE)
+  startedAt    DateTime         @default(now())
+  endedAt      DateTime?
+  pausedAt     DateTime?
+  resumedAt    DateTime?
+  totalActiveSeconds Int        @default(0)
+  note         String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  courier      Courier          @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  earningEntries EarningLedgerEntry[]
+
+  @@index([courierId, status])
+}
+
+// ─── Payout period (výplatné obdobie) ───
+
+model PayoutPeriod {
+  id                  String             @id @default(cuid())
+  courierId           String
+  frequency           PayoutFrequency
+  periodStart         DateTime
+  periodEnd           DateTime
+  payoutDueDate       DateTime
+  status              PayoutPeriodStatus @default(OPEN)
+  grossEarningsCents  Int                @default(0)
+  bonusesCents        Int                @default(0)
+  adjustmentsCents    Int                @default(0)
+  payableCents        Int                @default(0)
+  currency            String             @default("EUR")
+  lockedAt            DateTime?
+  approvedAt          DateTime?
+  approvedByUserId    String?
+  paidAt              DateTime?
+  paymentReference    String?
+  payoutBatchId       String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  courier             Courier            @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  earningEntries      EarningLedgerEntry[]
+  selfBillingInvoice  SelfBillingInvoice?
+  agreementStatement  AgreementEarningsStatement?
+  approvedBy          User?              @relation("PayoutApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  batch               PayoutBatch?       @relation(fields: [payoutBatchId], references: [id], onDelete: SetNull)
+
+  @@unique([courierId, periodStart, periodEnd])
+  @@index([courierId, status])
+  @@index([status])
+}
+
+// ─── Payout batch (hromadná výplata) ───
+
+model PayoutBatch {
+  id              String             @id @default(cuid())
+  batchNumber     String             @unique
+  status          PayoutBatchStatus  @default(DRAFT)
+  totalCents      Int                @default(0)
+  currency        String             @default("EUR")
+  periodCount     Int                @default(0)
+  createdByUserId String?
+  createdAt       DateTime           @default(now())
+  processedAt     DateTime?
+  updatedAt       DateTime           @updatedAt
+
+  periods         PayoutPeriod[]
+  createdByUser   User?              @relation("PayoutBatchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+}
+
+// ─── Self-billing invoice (samofaktúra) ───
+
+model SelfBillingInvoice {
+  id                     String                   @id @default(cuid())
+  invoiceNumber          String                   @unique
+  courierId              String
+  payoutPeriodId         String                   @unique
+  selfBillingAgreementId String?
+  supplierSnapshotJson   String                   // JSON: courier business profile
+  customerSnapshotJson   String                   // JSON: restaurant entity
+  issueDate              DateTime
+  supplyDate             DateTime
+  dueDate                DateTime
+  currency               String                   @default("EUR")
+  amountExVatCents       Int                      @default(0)
+  vatRateBasisPoints     Int                      @default(0)
+  vatAmountCents         Int                      @default(0)
+  totalAmountCents       Int                      @default(0)
+  status                 SelfBillingInvoiceStatus @default(DRAFT)
+  pdfStorageKey          String?
+  contentHash            String?
+  issuedAt               DateTime?
+  deliveredAt            DateTime?
+  acceptedAt             DateTime?
+  rejectedAt             DateTime?
+  rejectionReason        String?
+  createdByUserId        String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  courier                Courier                  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  payoutPeriod           PayoutPeriod             @relation(fields: [payoutPeriodId], references: [id], onDelete: Cascade)
+  selfBillingAgreement   SelfBillingAgreement?    @relation(fields: [selfBillingAgreementId], references: [id], onDelete: SetNull)
+  createdByUser          User?                    @relation("SelfBillingInvoiceCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([courierId])
+  @@index([status])
+}
+
+// ─── Agreement earnings statement (výkaz odmeny dohodára) ───
+
+model AgreementEarningsStatement {
+  id                  String                   @id @default(cuid())
+  statementNumber     String                   @unique
+  courierId           String
+  payoutPeriodId      String                   @unique
+  periodStart         DateTime
+  periodEnd           DateTime
+  deliveryCount       Int                      @default(0)
+  totalActiveSeconds  Int                      @default(0)
+  baseEarningsCents   Int                      @default(0)
+  bonusEarningsCents  Int                      @default(0)
+  adjustmentCents     Int                      @default(0)
+  grossEarningsCents  Int                      @default(0)
+  netPaidCents        Int?
+  paidAt              DateTime?
+  status              AgreementStatementStatus @default(DRAFT)
+  pdfStorageKey       String?
+  createdByUserId     String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  courier             Courier                  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  payoutPeriod        PayoutPeriod             @relation(fields: [payoutPeriodId], references: [id], onDelete: Cascade)
+  createdByUser       User?                    @relation("StatementCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([courierId])
+}
+
+// ─── Courier audit log ───
+
+model CourierAuditLog {
+  id              String              @id @default(cuid())
+  courierId       String
+  action          CourierAuditAction
+  oldValueJson    String?
+  newValueJson    String?
+  reason          String?
+  actorUserId     String?
+  ipHash          String?
+  sessionLabel    String?
+  createdAt       DateTime            @default(now())
+
+  courier         Courier             @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  actorUser       User?               @relation("CourierAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([courierId, createdAt])
+  @@index([action])
 }
