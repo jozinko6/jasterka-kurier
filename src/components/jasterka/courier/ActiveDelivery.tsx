@@ -12,6 +12,29 @@ import {
   Store, User, CreditCard, Clock, MessageSquare, ExternalLink,
 } from 'lucide-react'
 
+interface OrderItem {
+  id: string
+  menuItemNameSnapshot: string
+  quantity: number
+}
+
+interface ActiveAssignmentOrder {
+  id: string
+  orderNumber: string
+  status: string
+  orderType: string
+  paymentMethod: string
+  totalAmount: number
+  customerName: string
+  customerPhone: string
+  deliveryAddressLine1: string | null
+  deliveryCity: string | null
+  deliveryNote: string | null
+  kitchenNote: string | null
+  items: OrderItem[]
+  zone: { id: string; name: string } | null
+}
+
 const STEPS = [
   { key: 'GO_TO_STORE', label: 'Choď do prevádzky', icon: Store },
   { key: 'AT_STORE', label: 'Som pri prevádzke', icon: MapPin },
@@ -174,7 +197,7 @@ export function ActiveDelivery({ onClose }: { onClose: () => void }) {
             <h3 className="font-semibold">Obsah objednávky</h3>
           </div>
           <div className="space-y-1">
-            {order.items.map((item: any) => (
+            {order.items.map((item: OrderItem) => (
               <div key={item.id} className="text-sm text-gray-700">
                 {item.quantity}× {item.menuItemNameSnapshot}
               </div>

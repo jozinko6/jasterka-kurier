@@ -423,26 +423,31 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     const basePrice = Number(menuItem.basePrice)
     let unitTotal = basePrice
 
-    // Validate SIZE option (required group)
+    // ─── Validate SIZE option (required group) ───
+    // selectedSize must be an option ID, NOT a name
     const sizeOptions = menuItem.options.filter((o) => o.optionType === 'SIZE')
+    let selectedSizeId: string | null = null
     if (sizeOptions.length > 0) {
-      // If item has size options, one must be selected
       if (!item.selectedSize) {
         return apiError('INVALID_REQUEST', `Položka "${menuItem.name}" vyžaduje výber veľkosti.`)
       }
-      // Find by ID (not by name — client sends option ID)
-      const sizeOption = menuItem.options.find((o) => o.id === item.selectedSize || o.name === item.selectedSize)
+      // Find ONLY by ID — reject name-based lookup
+      const sizeOption = menuItem.options.find((o) => o.id === item.selectedSize)
       if (!sizeOption || sizeOption.optionType !== 'SIZE') {
-        return apiError('INVALID_REQUEST', `Neplatná veľkosť pre položku "${menuItem.name}".`)
+        return apiError('INVALID_REQUEST', `Neplatná veľkosť pre položku "${menuItem.name}". Použite ID voľby, nie názov.`)
       }
       unitTotal += Number(sizeOption.priceDelta)
+      selectedSizeId = sizeOption.id
     }
 
-    // Validate selected options (EXTRA + REMOVE)
+    // ─── Validate selected options (EXTRA + REMOVE only — NOT SIZE) ───
     const selectedOptionSnapshot: Array<{ id: string; name: string; priceDelta: number }> = []
     if (item.selectedOptions && Array.isArray(item.selectedOptions)) {
       // Check for duplicate option IDs
       const seenIds = new Set<string>()
+      // If size was selected, add it to seenIds to prevent it appearing in selectedOptions too
+      if (selectedSizeId) seenIds.add(selectedSizeId)
+
       for (const optId of item.selectedOptions) {
         if (seenIds.has(optId)) {
           return apiError('INVALID_REQUEST', `Duplicitná voľba v položke "${menuItem.name}".`)
@@ -455,6 +460,13 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
           return apiError(
             'INVALID_REQUEST',
             `Voľba "${optId}" nepatrí položke "${menuItem.name}".`
+          )
+        }
+        // Reject SIZE options in selectedOptions — they must go through selectedSize
+        if (option.optionType === 'SIZE') {
+          return apiError(
+            'INVALID_REQUEST',
+            `Veľkosť musí byť vybraná v poli selectedSize, nie v selectedOptions.`
           )
         }
         if (!option.isActive) {
