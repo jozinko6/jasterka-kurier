@@ -487,9 +487,8 @@ function CartSheet({
   })
 
   const subtotal = cartStore.getSubtotal()
-  const defaultZone = zones?.[0]
-  const deliveryFee = defaultZone?.deliveryFee || 0
-  const total = subtotal + deliveryFee
+  // Don't show first zone's fee as actual delivery — it's calculated after zone selection
+  const total = subtotal // delivery fee is shown in checkout after zone selection
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -574,7 +573,7 @@ function CartSheet({
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Dopravné</span>
-              <span>{formatPrice(deliveryFee)}</span>
+              <span className="text-muted-foreground">Dopravné sa vypočíta podľa zóny</span>
             </div>
             <Separator />
             <div className="flex justify-between font-bold text-lg">
@@ -641,6 +640,8 @@ function CheckoutSheet({
   const subtotal = cartStore.getSubtotal()
   const deliveryFee = orderType === 'DELIVERY' ? (selectedZone?.deliveryFee || 0) : 0
   const total = subtotal + deliveryFee
+  const meetsMinimum = orderType === 'PICKUP' || !selectedZone || subtotal >= (selectedZone?.minimumOrderAmount || 0)
+  const belowMinimumBy = selectedZone ? selectedZone.minimumOrderAmount - subtotal : 0
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
@@ -670,9 +671,8 @@ function CheckoutSheet({
           deliveryNote: orderType === 'DELIVERY' ? deliveryNote : undefined,
           kitchenNote: kitchenNote || undefined,
           items,
-          subtotalAmount: subtotal,
-          deliveryFee,
-          totalAmount: total,
+          // NOTE: subtotalAmount, deliveryFee, totalAmount are NOT sent —
+          // server computes all prices from menu items + zone
         }),
       })
       if (!res.ok) {
@@ -694,6 +694,7 @@ function CheckoutSheet({
 
   const canSubmit = customerName.trim() && customerPhone.trim() && cartStore.items.length > 0
     && (orderType === 'PICKUP' || (deliveryZoneId && deliveryAddress.trim()))
+    && meetsMinimum
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -812,6 +813,12 @@ function CheckoutSheet({
                       <span>Očakávaný čas:</span>
                       <span className="font-medium">~{selectedZone.estimatedDeliveryMinutes} min</span>
                     </div>
+                  </div>
+                )}
+                {selectedZone && !meetsMinimum && (
+                  <div className="rounded-lg p-3 text-sm bg-red-50 text-red-700 border border-red-200">
+                    <span className="font-medium">Minimálna objednávka pre túto zónu je {formatPrice(selectedZone.minimumOrderAmount)}.</span>{' '}
+                    Pridajte ešte tovar za {formatPrice(belowMinimumBy)}.
                   </div>
                 )}
                 <div>
@@ -996,6 +1003,45 @@ function OrderTracking({ orderId, onBack }: { orderId: string; onBack: () => voi
               </Badge>
             </div>
 
+            {/* ETA display */}
+            {(order as any).estimatedReadyAt && order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && (
+              <Card className="p-4" style={{ backgroundColor: '#f0f7ec' }}>
+                <div className="text-center space-y-1">
+                  <p className="text-sm text-muted-foreground">Predpokladané pripravenie</p>
+                  <p className="text-2xl font-bold" style={{ color: '#4f7f2a' }}>
+                    {new Date((order as any).estimatedReadyAt).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  {order.orderType === 'DELIVERY' && (order as any).estimatedDeliveryFrom && (order as any).estimatedDeliveryTo && (
+                    <>
+                      <Separator className="my-2" />
+                      <p className="text-sm text-muted-foreground">Predpokladané doručenie</p>
+                      <p className="text-xl font-bold" style={{ color: '#4f7f2a' }}>
+                        {new Date((order as any).estimatedDeliveryFrom!).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })}
+                        {' – '}
+                        {new Date((order as any).estimatedDeliveryTo!).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </>
+                  )}
+                  {(order as any).publicDelayReason && (
+                    <p className="text-xs text-amber-600 mt-2">
+                      Dôvod meškania: {getDelayLabel((order as any).publicDelayReason)}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Časy sú orientačné a môžu sa mierne zmeniť.
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {!((order as any).estimatedReadyAt) && order.status === 'NEW' && (
+              <Card className="p-4 text-center" style={{ backgroundColor: '#fff4df' }}>
+                <Clock className="h-8 w-8 mx-auto mb-2 text-amber-500" />
+                <p className="text-sm text-muted-foreground">Objednávka bola prijatá.</p>
+                <p className="text-sm font-medium">Čakáme na potvrdenie času kuchyňou.</p>
+              </Card>
+            )}
+
             {deliveryCourier && (
               <Card className="p-4">
                 <div className="flex items-center gap-3">
@@ -1104,4 +1150,16 @@ function OrderTracking({ orderId, onBack }: { orderId: string; onBack: () => voi
       </div>
     </div>
   )
+}
+
+function getDelayLabel(reason: string): string {
+  const labels: Record<string, string> = {
+    HIGH_DEMAND: 'zvýšený počet objednávok',
+    COMPLEX_ORDER: 'náročnejšia príprava objednávky',
+    INGREDIENT_DELAY: 'krátke zdržanie pri príprave',
+    COURIER_DELAY: 'čakanie na kuriéra',
+    TRAFFIC: 'aktuálna dopravná situácia',
+    OTHER: 'neočakávané zdržanie',
+  }
+  return labels[reason] || reason
 }
