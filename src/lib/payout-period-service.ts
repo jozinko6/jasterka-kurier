@@ -130,17 +130,25 @@ export async function lockPayoutPeriod(
   // Recalculate totals
   const totals = await recalculatePayoutPeriod(periodId)
 
-  // Lock the period
+  // Lock the period — conditional update (compare-and-swap on status)
   const now = new Date()
   await db.$transaction(async (tx) => {
-    await tx.payoutPeriod.update({
-      where: { id: periodId },
+    // Conditional update: only lock if status is OPEN or CALCULATED
+    const lockResult = await tx.payoutPeriod.updateMany({
+      where: {
+        id: periodId,
+        status: { in: ['OPEN', 'CALCULATED'] },
+      },
       data: {
         status: 'LOCKED',
         lockedAt: now,
         ...totals,
       },
     })
+
+    if (lockResult.count !== 1) {
+      throw new PayoutPeriodError('CONFLICT', 'Obdobie bolo medzičasom zmenené iným používateľom.')
+    }
 
     await tx.courierAuditLog.create({
       data: {
@@ -237,14 +245,22 @@ export async function approvePayoutPeriod(
 
   const now = new Date()
   await db.$transaction(async (tx) => {
-    await tx.payoutPeriod.update({
-      where: { id: periodId },
+    // Conditional update: only approve if status is LOCKED
+    const approveResult = await tx.payoutPeriod.updateMany({
+      where: {
+        id: periodId,
+        status: 'LOCKED',
+      },
       data: {
         status: 'APPROVED',
         approvedAt: now,
         approvedByUserId: actorUserId,
       },
     })
+
+    if (approveResult.count !== 1) {
+      throw new PayoutPeriodError('CONFLICT', 'Obdobie bolo medzičasom zmenené.')
+    }
 
     await tx.courierAuditLog.create({
       data: {
@@ -290,14 +306,22 @@ export async function markPayoutPaid(
 
   const now = paidAt ?? new Date()
   await db.$transaction(async (tx) => {
-    await tx.payoutPeriod.update({
-      where: { id: periodId },
+    // Conditional update: only mark paid if status is APPROVED or PROCESSING
+    const paidResult = await tx.payoutPeriod.updateMany({
+      where: {
+        id: periodId,
+        status: { in: ['APPROVED', 'PROCESSING'] },
+      },
       data: {
         status: 'PAID',
         paidAt: now,
         paymentReference,
       },
     })
+
+    if (paidResult.count !== 1) {
+      throw new PayoutPeriodError('CONFLICT', 'Obdobie bolo medzičasom zmenené.')
+    }
 
     await tx.courierAuditLog.create({
       data: {

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireCourier, requireAssignedCourierForOrder } from '@/lib/courier-auth'
+import { requireCourier } from '@/lib/courier-auth'
 import { apiError, withErrorHandler } from '@/lib/api-errors'
 import { completeDeliveryOrder, CompleteOrderError } from '@/lib/order-completion-service'
 import { centsToEuros } from '@/lib/money'
@@ -8,15 +8,23 @@ import { centsToEuros } from '@/lib/money'
 /**
  * POST /api/courier/orders/[id]/complete
  *
- * Atomic action: marks the order as DELIVERED and creates all financial records.
- * - Verifies courier owns the active assignment
- * - Computes remuneration from the plan snapshot
- * - Creates earning ledger entries (idempotent via idempotencyKey)
- * - Records cash collected (if CASH payment)
- * - Updates order, assignment, courier status, active order count
+ * Atomic action: marks the order as DELIVERED and creates all financial records
+ * in a SINGLE database transaction.
  *
- * Idempotent: if the order is already DELIVERED, returns existing earnings
- * without creating duplicates.
+ * Idempotency:
+ * - Accepts Idempotency-Key header (or generates one)
+ * - If the order is already DELIVERED by the same courier, returns existing
+ *   earnings without creating duplicates
+ * - Different courier gets 403 (no financial data leaked)
+ *
+ * Transaction includes:
+ * - Conditional order update (compare-and-swap)
+ * - Remuneration snapshot finalization
+ * - Earning ledger entries (idempotent via unique keys)
+ * - Cash ledger entry (if CASH, idempotent via unique key)
+ * - Assignment update to DELIVERED
+ * - Single status history entry
+ * - Active order count recalculation
  */
 export const POST = withErrorHandler(async (
   request: NextRequest,
@@ -28,10 +36,6 @@ export const POST = withErrorHandler(async (
 
   const { courier, user } = authResult.data
 
-  // Verify ownership BEFORE calling completion service
-  const ownership = await requireAssignedCourierForOrder(courier.id, orderId)
-  if ('error' in ownership) return ownership.error
-
   // Parse optional body
   let body: { tipCents?: number; isBadWeather?: boolean; actualDistanceMeters?: number } = {}
   try {
@@ -41,11 +45,15 @@ export const POST = withErrorHandler(async (
     // Empty or invalid body is fine — these are all optional
   }
 
+  // Accept Idempotency-Key header, or generate one
+  const idempotencyKey = request.headers.get('Idempotency-Key') || undefined
+
   try {
     const result = await completeDeliveryOrder(orderId, courier.id, user.id, {
       tipCents: body.tipCents,
       isBadWeather: body.isBadWeather,
       actualDistanceMeters: body.actualDistanceMeters,
+      idempotencyKey,
     })
 
     return Response.json({
@@ -58,15 +66,18 @@ export const POST = withErrorHandler(async (
       cashCollectedBalanceEuros: result.cashCollectedCents !== null
         ? centsToEuros(result.cashCollectedCents)
         : null,
+      idempotent: result.idempotent,
     }, {
       headers: { 'Cache-Control': 'private, no-store, max-age=0' },
     })
   } catch (err) {
     if (err instanceof CompleteOrderError) {
-      const codeMap: Record<string, 'NOT_FOUND' | 'FORBIDDEN' | 'BUSINESS_RULE_VIOLATION'> = {
+      const codeMap: Record<string, 'NOT_FOUND' | 'FORBIDDEN' | 'BUSINESS_RULE_VIOLATION' | 'CONFLICT'> = {
         ORDER_NOT_FOUND: 'NOT_FOUND',
         NOT_ASSIGNED: 'FORBIDDEN',
         INVALID_STATUS: 'BUSINESS_RULE_VIOLATION',
+        STATUS_CONFLICT: 'CONFLICT',
+        NO_PLAN: 'BUSINESS_RULE_VIOLATION',
       }
       return apiError(codeMap[err.code] ?? 'BUSINESS_RULE_VIOLATION', err.message)
     }

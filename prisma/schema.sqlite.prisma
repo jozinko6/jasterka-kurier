@@ -854,6 +854,7 @@ model CashLedgerEntry {
   confirmedByUserId  String?
   occurredAt         DateTime       @default(now())
   createdAt          DateTime       @default(now())
+  idempotencyKey     String?        @unique
 
   courier            Courier        @relation(fields: [courierId], references: [id], onDelete: Cascade)
   order              Order?         @relation(fields: [orderId], references: [id], onDelete: Cascade)

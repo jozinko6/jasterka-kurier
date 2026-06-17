@@ -259,9 +259,20 @@ export const PATCH = withErrorHandler(async (
     return apiError('BUSINESS_RULE_VIOLATION', transition.reason ?? 'Prechod nie je povolený.')
   }
 
-  // ─── Optimistic concurrency check ───
-  // If client sent expectedStatus, verify it matches current status atomically.
-  const expectedStatus = data.expectedStatus
+  // ─── Unconditional optimistic concurrency ───
+  // ALWAYS use compare-and-swap with the server-loaded currentStatus.
+  // This prevents race conditions even when the client doesn't send expectedStatus.
+  // If the client sends expectedStatus and it doesn't match currentStatus, return 409 immediately.
+  const currentStatus = existingOrder.status
+  const clientExpectedStatus = data.expectedStatus
+
+  if (clientExpectedStatus && clientExpectedStatus !== currentStatus) {
+    return apiError('CONFLICT', 'Objednávku medzičasom zmenil iný používateľ.', {
+      currentStatus,
+      expectedStatus: clientExpectedStatus,
+    })
+  }
+
   const now = new Date()
 
   const timestampUpdates: Record<string, Date> = {}
@@ -274,14 +285,12 @@ export const PATCH = withErrorHandler(async (
 
   try {
     const updatedOrder = await db.$transaction(async (tx) => {
-      // Atomic update with expectedStatus guard
-      const updateWhere: Record<string, unknown> = { id }
-      if (expectedStatus) {
-        updateWhere.status = expectedStatus
-      }
-
+      // Unconditional compare-and-swap: always guard with currentStatus
       const updateResult = await tx.order.updateMany({
-        where: updateWhere,
+        where: {
+          id,
+          status: currentStatus, // server-loaded status as guard
+        },
         data: {
           status: data.status as OrderStatus,
           ...timestampUpdates,
@@ -289,7 +298,7 @@ export const PATCH = withErrorHandler(async (
       })
 
       if (updateResult.count !== 1) {
-        // Either the row doesn't exist, or expectedStatus didn't match
+        // Status changed between our read and update — race condition detected
         throw new Error('STATUS_CONFLICT')
       }
 

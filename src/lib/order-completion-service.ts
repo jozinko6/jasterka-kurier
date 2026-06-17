@@ -2,24 +2,25 @@
  * Order completion service.
  *
  * This is the SINGLE place where an order is marked as DELIVERED and all
- * financial side-effects are triggered:
- * - Remuneration snapshot is finalized
- * - Earning ledger entries are created (idempotently)
- * - Cash ledger entry is created (if CASH payment)
- * - Delivery assignment is updated
- * - Courier active order count is decremented
- * - Work session stays open (courier can continue working)
+ * financial side-effects are triggered. The ENTIRE operation is one database
+ * transaction — if any step fails, nothing is persisted:
+ * - Conditional order update (compare-and-swap on status)
+ * - Remuneration snapshot finalization
+ * - Earning ledger entries creation (idempotent via idempotencyKey)
+ * - Cash ledger entry creation (if CASH payment)
+ * - Delivery assignment update
+ * - Courier active order count recalculation
+ * - Status history creation
  *
- * All operations are in a single transaction. The idempotency key on
- * EarningLedgerEntry ensures that a retried completion request does not
- * create duplicate earnings.
+ * Idempotency: if the order is already DELIVERED by the same courier,
+ * returns existing entries without creating duplicates.
  */
 
 import { db } from '@/lib/db'
 import type { OrderStatus } from '@prisma/client'
-import { getOrCreateOrderSnapshot, setActualSnapshotTotal } from '@/lib/remuneration-snapshot-service'
-import { createEarningEntriesForOrder } from '@/lib/earning-ledger-service'
-import { recordCashCollected } from '@/lib/cash-ledger-service'
+import { Prisma } from '@prisma/client'
+import { calculateOrderRemuneration, type RemunerationPlanSnapshot, type OrderCompensationInput } from '@/lib/remuneration'
+import { getBratislavaPeriodForDate } from '@/lib/payout-periods'
 
 export interface CompleteOrderResult {
   orderId: string
@@ -27,12 +28,15 @@ export interface CompleteOrderResult {
   totalEarningsCents: number
   earningEntryIds: string[]
   cashCollectedCents: number | null
+  idempotent: boolean
 }
 
 /**
  * Mark an order as DELIVERED and create all financial records.
- * Idempotent: if the order is already DELIVERED, returns the existing state
- * without creating duplicate entries.
+ * The ENTIRE operation is a single database transaction.
+ *
+ * Idempotent: if the order is already DELIVERED by the same courier,
+ * returns existing entries without creating duplicates.
  *
  * Caller must verify that the requesting courier owns the active assignment.
  */
@@ -44,154 +48,473 @@ export async function completeDeliveryOrder(
     tipCents?: number
     isBadWeather?: boolean
     actualDistanceMeters?: number
+    idempotencyKey?: string
   }
 ): Promise<CompleteOrderResult> {
-  // Load order with assignment
-  const order = await db.order.findUnique({
-    where: { id: orderId },
-    include: {
-      assignments: {
-        where: { status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'] } },
-        take: 1,
-      },
-      deliveryZone: true,
-    },
-  })
-
-  if (!order) {
-    throw new CompleteOrderError('ORDER_NOT_FOUND', 'Objednávka nenájdená')
-  }
-
-  // If already delivered, return existing state (idempotent).
-  // This check MUST come before the ownership check, because after delivery
-  // the assignment status is DELIVERED (not in ASSIGNED/ACCEPTED/PICKED_UP),
-  // so the ownership filter would return empty.
-  if (order.status === 'DELIVERED') {
-    const existingEntries = await db.earningLedgerEntry.findMany({
-      where: { orderId, type: { not: 'REVERSAL' } },
-      select: { id: true, amountCents: true },
-    })
-    const total = existingEntries.reduce((s, e) => s + e.amountCents, 0)
-    return {
-      orderId,
-      orderStatus: 'DELIVERED',
-      totalEarningsCents: total,
-      earningEntryIds: existingEntries.map((e) => e.id),
-      cashCollectedCents: null,
-    }
-  }
-
-  // Verify ownership (courier must have an active assignment to this order)
-  const assignment = order.assignments[0]
-  if (!assignment || assignment.courierId !== courierId) {
-    throw new CompleteOrderError('NOT_ASSIGNED', 'Objednávka nie je priradená tomuto kuriérovi')
-  }
-
-  // Verify the order is in a completable state
-  if (!['PICKED_UP', 'ON_THE_WAY'].includes(order.status)) {
-    throw new CompleteOrderError(
-      'INVALID_STATUS',
-      `Objednávku nemožno dokončiť zo stavu ${order.status}`
-    )
-  }
-
   const occurredAt = new Date()
+  const idempotencyKey = options?.idempotencyKey || `complete:${orderId}:${courierId}`
 
-  // 1. Get or create remuneration snapshot + calculate
-  const { snapshotId, calculation } = await getOrCreateOrderSnapshot(orderId, courierId, {
-    orderId,
-    orderNumber: order.orderNumber,
-    courierId,
-    zoneId: order.deliveryZoneId,
-    totalDistanceMeters: options?.actualDistanceMeters,
-    tipCents: options?.tipCents,
-    isBadWeather: options?.isBadWeather,
-    occurredAt,
-  })
-
-  // 2. Create earning ledger entries (idempotent)
-  const { entryIds, created } = await createEarningEntriesForOrder({
-    courierId,
-    orderId,
-    assignmentId: assignment.id,
-    components: calculation.components,
-    planSnapshot: calculation.planSnapshot,
-    remunerationPlanVersionId: await getPlanVersionId(snapshotId),
-    occurredAt,
-    createdByUserId: actorUserId,
-  })
-
-  // 3. Update snapshot with actual total
-  if (created) {
-    await setActualSnapshotTotal(orderId, calculation.totalCents)
-  }
-
-  // 4. If CASH payment, record cash collected
-  let cashCollectedCents: number | null = null
-  if (order.paymentMethod === 'CASH' && created) {
-    const cashResult = await recordCashCollected({
-      courierId,
-      orderId,
-      amountCents: Math.round(order.totalAmount * 100), // totalAmount is in euros (Float during migration)
-    })
-    cashCollectedCents = cashResult.balanceAfterCents
-  }
-
-  // 5. Update order status + assignment in a transaction
-  await db.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: orderId },
-      data: {
-        status: 'DELIVERED',
-        deliveredAt: occurredAt,
-        statusHistory: {
-          create: {
-            status: 'DELIVERED',
-            changedByUserId: actorUserId,
-            reason: 'Doručené kuriérom',
+  try {
+    const result = await db.$transaction(async (tx) => {
+      // 1. Load order with assignment (within transaction for consistency)
+      // Include DELIVERED assignments too, for idempotent retry
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: {
+          assignments: {
+            where: {
+              courierId,
+              status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'DELIVERED'] },
+            },
+            take: 1,
           },
+          deliveryZone: true,
         },
-      },
-    })
+      })
 
-    await tx.deliveryAssignment.update({
-      where: { id: assignment.id },
-      data: {
-        status: 'DELIVERED',
-        deliveredAt: occurredAt,
-      },
-    })
+      if (!order) {
+        throw new CompleteOrderError('ORDER_NOT_FOUND', 'Objednávka nenájdená')
+      }
 
-    // Recalculate courier active order count
-    const activeCount = await tx.deliveryAssignment.count({
-      where: {
+      const assignment = order.assignments[0]
+
+      // 2. If already delivered by same courier → idempotent return
+      if (order.status === 'DELIVERED' && assignment?.status === 'DELIVERED') {
+        const existingEntries = await tx.earningLedgerEntry.findMany({
+          where: { orderId, type: { not: 'REVERSAL' }, status: 'CONFIRMED' },
+          select: { id: true, amountCents: true },
+        })
+        const total = existingEntries.reduce((s, e) => s + e.amountCents, 0)
+
+        // Get current cash balance for this courier
+        const cashEntry = await tx.cashLedgerEntry.findFirst({
+          where: { orderId, courierId, type: 'CASH_COLLECTED' },
+          select: { balanceAfterCents: true },
+        })
+
+        return {
+          orderId,
+          orderStatus: 'DELIVERED' as OrderStatus,
+          totalEarningsCents: total,
+          earningEntryIds: existingEntries.map((e) => e.id),
+          cashCollectedCents: cashEntry?.balanceAfterCents ?? null,
+          idempotent: true,
+        }
+      }
+
+      // 3. Verify ownership (courier must have an active assignment)
+      if (!assignment || assignment.courierId !== courierId) {
+        throw new CompleteOrderError('NOT_ASSIGNED', 'Objednávka nie je priradená tomuto kuriérovi')
+      }
+
+      // 4. Conditional update (compare-and-swap on status)
+      const updateResult = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          status: { in: ['PICKED_UP', 'ON_THE_WAY'] },
+        },
+        data: {
+          status: 'DELIVERED',
+          deliveredAt: occurredAt,
+        },
+      })
+
+      if (updateResult.count !== 1) {
+        // Status changed between our read and update — race condition
+        throw new CompleteOrderError('STATUS_CONFLICT', 'Objednávku medzičasom zmenil iný používateľ.')
+      }
+
+      // 5. Load remuneration plan snapshot for this courier
+      const planData = await loadPlanSnapshotForCourierTx(tx, courierId, occurredAt)
+      if (!planData) {
+        throw new CompleteOrderError('NO_PLAN', 'Pre kuriéra nebol nájdený žiadny sadzobník.')
+      }
+
+      // 6. Calculate remuneration
+      const input: OrderCompensationInput = {
+        orderId,
+        orderNumber: order.orderNumber,
         courierId,
-        status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'] },
-        order: { status: { in: ['ASSIGNED_TO_COURIER', 'PICKED_UP', 'ON_THE_WAY'] } },
-      },
+        zoneId: order.deliveryZoneId,
+        totalDistanceMeters: options?.actualDistanceMeters,
+        tipCents: options?.tipCents,
+        isBadWeather: options?.isBadWeather,
+        occurredAt,
+        courierOverrides: planData.overrides,
+      }
+      const calculation = calculateOrderRemuneration(planData.snapshot, input)
+
+      // 7. Create or get remuneration snapshot (immutable)
+      let snapshotId: string
+      const existingSnapshot = await tx.orderRemunerationSnapshot.findUnique({
+        where: { orderId },
+        select: { id: true },
+      })
+      if (existingSnapshot) {
+        snapshotId = existingSnapshot.id
+        await tx.orderRemunerationSnapshot.update({
+          where: { id: snapshotId },
+          data: { actualTotalCents: calculation.totalCents },
+        })
+      } else {
+        const created = await tx.orderRemunerationSnapshot.create({
+          data: {
+            orderId,
+            courierId,
+            remunerationPlanVersionId: planData.versionId,
+            planSnapshotJson: JSON.stringify(planData.snapshot),
+            estimatedTotalCents: calculation.totalCents,
+            actualTotalCents: calculation.totalCents,
+          },
+          select: { id: true },
+        })
+        snapshotId = created.id
+      }
+
+      // 8. Create earning ledger entries (idempotent via unique idempotencyKey)
+      const earningEntryIds: string[] = []
+      for (let i = 0; i < calculation.components.length; i++) {
+        const component = calculation.components[i]
+        const entryIdempotencyKey = `order:${orderId}:${component.type}:${i}`
+
+        // Try to find existing first
+        let entry = await tx.earningLedgerEntry.findUnique({
+          where: { idempotencyKey: entryIdempotencyKey },
+          select: { id: true },
+        })
+
+        if (!entry) {
+          // Get or create payout period
+          const payoutPeriodId = await getOrCreatePayoutPeriodIdTx(tx, courierId, occurredAt)
+
+          entry = await tx.earningLedgerEntry.create({
+            data: {
+              courierId,
+              orderId,
+              assignmentId: assignment.id,
+              payoutPeriodId,
+              type: component.type,
+              amountCents: component.amountCents,
+              currency: 'EUR',
+              description: component.description,
+              calculationMetadataJson: component.metadata
+                ? JSON.stringify(component.metadata)
+                : null,
+              remunerationPlanVersionId: planData.versionId,
+              status: 'CONFIRMED',
+              occurredAt,
+              confirmedAt: occurredAt,
+              createdByUserId: actorUserId,
+              idempotencyKey: entryIdempotencyKey,
+            },
+            select: { id: true },
+          })
+        }
+        earningEntryIds.push(entry.id)
+      }
+
+      // 9. Create cash ledger entry (if CASH payment, idempotent)
+      let cashCollectedCents: number | null = null
+      if (order.paymentMethod === 'CASH') {
+        const cashIdempotencyKey = `cash:${orderId}`
+        const existingCash = await tx.cashLedgerEntry.findUnique({
+          where: { idempotencyKey: cashIdempotencyKey },
+          select: { id: true, balanceAfterCents: true },
+        })
+
+        if (existingCash) {
+          cashCollectedCents = existingCash.balanceAfterCents
+        } else {
+          // Calculate balance from SUM (not read-then-write)
+          const balanceAgg = await tx.cashLedgerEntry.aggregate({
+            where: { courierId },
+            _sum: { amountCents: true },
+          })
+          const balanceBefore = balanceAgg._sum.amountCents ?? 0
+          const cashAmount = Math.round(order.totalAmount * 100)
+          const balanceAfter = balanceBefore + cashAmount
+
+          await tx.cashLedgerEntry.create({
+            data: {
+              courierId,
+              orderId,
+              type: 'CASH_COLLECTED',
+              amountCents: cashAmount,
+              balanceAfterCents: balanceAfter,
+              note: 'Hotovosť od zákazníka za objednávku',
+              occurredAt,
+              idempotencyKey: cashIdempotencyKey,
+            },
+          })
+          cashCollectedCents = balanceAfter
+        }
+      }
+
+      // 10. Update assignment to DELIVERED
+      await tx.deliveryAssignment.update({
+        where: { id: assignment.id },
+        data: {
+          status: 'DELIVERED',
+          deliveredAt: occurredAt,
+        },
+      })
+
+      // 11. Create exactly one status history entry
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          status: 'DELIVERED',
+          changedByUserId: actorUserId,
+          reason: 'Doručené kuriérom',
+        },
+      })
+
+      // 12. Recalculate courier active order count
+      const activeCount = await tx.deliveryAssignment.count({
+        where: {
+          courierId,
+          status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'] },
+          order: { status: { in: ['ASSIGNED_TO_COURIER', 'PICKED_UP', 'ON_THE_WAY'] } },
+        },
+      })
+      await tx.courier.update({
+        where: { id: courierId },
+        data: { activeOrderCount: activeCount },
+      })
+
+      return {
+        orderId,
+        orderStatus: 'DELIVERED' as OrderStatus,
+        totalEarningsCents: calculation.totalCents,
+        earningEntryIds,
+        cashCollectedCents,
+        idempotent: false,
+      }
     })
-    await tx.courier.update({
-      where: { id: courierId },
-      data: { activeOrderCount: activeCount },
-    })
+
+    return result
+  } catch (err) {
+    if (err instanceof CompleteOrderError) throw err
+    // Handle Prisma unique constraint violations (P2002) — idempotent retry
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      // Return existing state
+      return await getIdempotentResult(orderId, courierId)
+    }
+    throw err
+  }
+}
+
+/**
+ * Load existing earning entries for an already-delivered order (idempotent path).
+ */
+async function getIdempotentResult(orderId: string, courierId: string): Promise<CompleteOrderResult> {
+  const entries = await db.earningLedgerEntry.findMany({
+    where: { orderId, type: { not: 'REVERSAL' }, status: 'CONFIRMED' },
+    select: { id: true, amountCents: true },
+  })
+  const total = entries.reduce((s, e) => s + e.amountCents, 0)
+
+  const cashEntry = await db.cashLedgerEntry.findFirst({
+    where: { orderId, courierId, type: 'CASH_COLLECTED' },
+    select: { balanceAfterCents: true },
   })
 
   return {
     orderId,
     orderStatus: 'DELIVERED',
-    totalEarningsCents: calculation.totalCents,
-    earningEntryIds: entryIds,
-    cashCollectedCents,
+    totalEarningsCents: total,
+    earningEntryIds: entries.map((e) => e.id),
+    cashCollectedCents: cashEntry?.balanceAfterCents ?? null,
+    idempotent: true,
   }
 }
 
-async function getPlanVersionId(snapshotId: string): Promise<string> {
-  const snapshot = await db.orderRemunerationSnapshot.findUnique({
-    where: { id: snapshotId },
-    select: { remunerationPlanVersionId: true },
+/**
+ * Load the active remuneration plan snapshot for a courier within a transaction.
+ */
+async function loadPlanSnapshotForCourierTx(
+  tx: Prisma.TransactionClient,
+  courierId: string,
+  at: Date
+): Promise<{ snapshot: RemunerationPlanSnapshot; versionId: string; overrides: any[] } | null> {
+  const courier = await tx.courier.findUnique({
+    where: { id: courierId },
+    include: {
+      activeCompensationProfile: {
+        include: {
+          remunerationPlan: {
+            include: {
+              rules: { where: { active: true } },
+              zoneRules: { where: { active: true }, include: { zone: true } },
+              peakRules: { where: { active: true } },
+            },
+          },
+        },
+      },
+      rateOverrides: { where: { active: true } },
+    },
   })
-  if (!snapshot) throw new Error('Snapshot not found')
-  return snapshot.remunerationPlanVersionId
+
+  let plan = courier?.activeCompensationProfile?.remunerationPlan ?? null
+
+  if (!plan) {
+    plan = await tx.remunerationPlan.findFirst({
+      where: { isActive: true },
+      include: {
+        rules: { where: { active: true } },
+        zoneRules: { where: { active: true }, include: { zone: true } },
+        peakRules: { where: { active: true } },
+      },
+    })
+  }
+
+  if (!plan) return null
+
+  const versions = await tx.remunerationPlanVersion.findMany({
+    where: { planId: plan.id, effectiveFrom: { lte: at } },
+    orderBy: { versionNumber: 'desc' },
+  })
+  const effectiveVersion = versions[0]
+  if (!effectiveVersion) return null
+
+  const snapshot: RemunerationPlanSnapshot = {
+    planId: plan.id,
+    planName: plan.name,
+    versionNumber: effectiveVersion.versionNumber,
+    currency: plan.currency,
+    rules: plan.rules.map((r) => ({
+      ruleType: r.ruleType,
+      valueType: r.valueType,
+      valueCents: r.valueCents,
+      valueBasisPoints: r.valueBasisPoints,
+      conditionJson: r.conditionJson,
+      priority: r.priority,
+    })),
+    zoneRules: plan.zoneRules.map((z) => ({
+      zoneId: z.zoneId,
+      zoneName: z.zone.name,
+      bonusCents: z.bonusCents,
+    })),
+    peakRules: plan.peakRules.map((p) => ({
+      dayOfWeek: p.dayOfWeek,
+      startTime: p.startTime,
+      endTime: p.endTime,
+      bonusCents: p.bonusCents,
+    })),
+  }
+
+  const overrides = (courier?.rateOverrides ?? []).map((o) => ({
+    ruleType: o.ruleType,
+    valueType: o.valueType,
+    valueCents: o.valueCents,
+    valueBasisPoints: o.valueBasisPoints,
+  }))
+
+  return { snapshot, versionId: effectiveVersion.id, overrides }
+}
+
+/**
+ * Get or create the open payout period for a courier at a given date.
+ * Only OPEN periods are used — never LOCKED/APPROVED/PAID.
+ */
+async function getOrCreatePayoutPeriodIdTx(
+  tx: Prisma.TransactionClient,
+  courierId: string,
+  date: Date
+): Promise<string | null> {
+  const courier = await tx.courier.findUnique({
+    where: { id: courierId },
+    include: {
+      activeCompensationProfile: {
+        select: {
+          payoutFrequency: true,
+          preferredPayoutWeekday: true,
+          monthlyPayoutDay: true,
+          payoutAnchorDate: true,
+        },
+      },
+    },
+  })
+
+  if (!courier?.activeCompensationProfile) return null
+
+  const profile = courier.activeCompensationProfile
+  const range = getBratislavaPeriodForDate(date, {
+    frequency: profile.payoutFrequency,
+    payoutWeekday: profile.preferredPayoutWeekday ?? 4,
+    monthlyPayoutDay: profile.monthlyPayoutDay ?? 15,
+    anchorDate: profile.payoutAnchorDate ?? undefined,
+  })
+
+  // Find or create OPEN period — never use LOCKED/APPROVED/PAID
+  const existing = await tx.payoutPeriod.findUnique({
+    where: {
+      courierId_periodStart_periodEnd: {
+        courierId,
+        periodStart: range.start,
+        periodEnd: range.end,
+      },
+    },
+    select: { id: true, status: true },
+  })
+
+  if (existing) {
+    // If period is not OPEN, find or create the next OPEN period
+    if (existing.status === 'OPEN') {
+      return existing.id
+    }
+    // Late entry — find next OPEN period or create one
+    // For simplicity, create a new OPEN period for the next cycle
+    const nextRange = getBratislavaPeriodForDate(range.end, {
+      frequency: profile.payoutFrequency,
+      payoutWeekday: profile.preferredPayoutWeekday ?? 4,
+      monthlyPayoutDay: profile.monthlyPayoutDay ?? 15,
+      anchorDate: profile.payoutAnchorDate ?? undefined,
+    })
+    const nextExisting = await tx.payoutPeriod.findUnique({
+      where: {
+        courierId_periodStart_periodEnd: {
+          courierId,
+          periodStart: nextRange.start,
+          periodEnd: nextRange.end,
+        },
+      },
+      select: { id: true, status: true },
+    })
+    if (nextExisting && nextExisting.status === 'OPEN') {
+      return nextExisting.id
+    }
+    if (nextExisting) {
+      // Skip to next-next period
+      return null
+    }
+    const created = await tx.payoutPeriod.create({
+      data: {
+        courierId,
+        frequency: profile.payoutFrequency,
+        periodStart: nextRange.start,
+        periodEnd: nextRange.end,
+        payoutDueDate: nextRange.dueDate,
+        status: 'OPEN',
+      },
+      select: { id: true },
+    })
+    return created.id
+  }
+
+  // Create new OPEN period
+  const created = await tx.payoutPeriod.create({
+    data: {
+      courierId,
+      frequency: profile.payoutFrequency,
+      periodStart: range.start,
+      periodEnd: range.end,
+      payoutDueDate: range.dueDate,
+      status: 'OPEN',
+    },
+    select: { id: true },
+  })
+  return created.id
 }
 
 export class CompleteOrderError extends Error {

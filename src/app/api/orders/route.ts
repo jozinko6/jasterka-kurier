@@ -28,11 +28,203 @@ function hashTrackingToken(token: string): string {
 
 const MAX_ITEM_QUANTITY = 50
 
+const VALID_STATUSES = new Set([
+  'NEW', 'ACCEPTED', 'IN_KITCHEN', 'PREPARING', 'READY',
+  'WAITING_FOR_COURIER', 'ASSIGNED_TO_COURIER', 'PICKED_UP',
+  'ON_THE_WAY', 'DELIVERED', 'CANCELLED', 'REFUNDED',
+])
+
+// ─── Role-specific DTO builders ───
+
+interface AdminOrderListItem {
+  id: string
+  orderNumber: string
+  status: string
+  orderType: string
+  paymentMethod: string
+  customerName: string
+  customerPhone: string
+  customerEmail: string | null
+  deliveryZoneId: string | null
+  deliveryAddressLine1: string | null
+  deliveryCity: string | null
+  subtotalAmount: number
+  deliveryFee: number
+  totalAmount: number
+  createdAt: Date
+  items: Array<{
+    id: string
+    menuItemNameSnapshot: string
+    quantity: number
+    kitchenNote: string | null
+  }>
+  assignments: Array<{
+    courierId: string
+    courierName: string
+    status: string
+  }>
+}
+
+interface KitchenOrderListItem {
+  id: string
+  orderNumber: string
+  status: string
+  orderType: string
+  paymentMethod: string
+  kitchenNote: string | null
+  createdAt: Date
+  items: Array<{
+    id: string
+    menuItemNameSnapshot: string
+    quantity: number
+    selectedSize: string | null
+    selectedOptions: string | null
+    kitchenNote: string | null
+  }>
+}
+
+interface CourierOrderListItem {
+  id: string
+  orderNumber: string
+  status: string
+  orderType: string
+  paymentMethod: string
+  customerName: string
+  customerPhone: string
+  deliveryAddressLine1: string | null
+  deliveryCity: string | null
+  deliveryNote: string | null
+  kitchenNote: string | null
+  totalAmount: number
+  createdAt: Date
+  items: Array<{
+    id: string
+    menuItemNameSnapshot: string
+    quantity: number
+  }>
+  assignment: {
+    id: string
+    status: string
+    assignedAt: Date
+    pickedUpAt: Date | null
+    deliveredAt: Date | null
+  } | null
+  deliveryZone: { id: string; name: string } | null
+}
+
+function toAdminOrderListDto(order: any): AdminOrderListItem {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    orderType: order.orderType,
+    paymentMethod: order.paymentMethod,
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    customerEmail: order.customerEmail,
+    deliveryZoneId: order.deliveryZoneId,
+    deliveryAddressLine1: order.deliveryAddressLine1,
+    deliveryCity: order.deliveryCity,
+    subtotalAmount: Number(order.subtotalAmount),
+    deliveryFee: Number(order.deliveryFee),
+    totalAmount: Number(order.totalAmount),
+    createdAt: order.createdAt,
+    items: (order.items || []).map((i: any) => ({
+      id: i.id,
+      menuItemNameSnapshot: i.menuItemNameSnapshot,
+      quantity: i.quantity,
+      kitchenNote: i.kitchenNote,
+    })),
+    assignments: (order.assignments || []).map((a: any) => ({
+      courierId: a.courierId,
+      courierName: a.courier?.displayName ?? 'Neznámy',
+      status: a.status,
+    })),
+  }
+}
+
+function toKitchenOrderListDto(order: any): KitchenOrderListItem {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    orderType: order.orderType,
+    paymentMethod: order.paymentMethod,
+    kitchenNote: order.kitchenNote,
+    createdAt: order.createdAt,
+    items: (order.items || []).map((i: any) => ({
+      id: i.id,
+      menuItemNameSnapshot: i.menuItemNameSnapshot,
+      quantity: i.quantity,
+      selectedSize: i.selectedSize,
+      selectedOptions: i.selectedOptions,
+      kitchenNote: i.kitchenNote,
+    })),
+  }
+}
+
+function toCourierOrderListDto(order: any, courierId: string): CourierOrderListItem | null {
+  // Find THIS courier's assignment (not other couriers')
+  const myAssignment = (order.assignments || []).find(
+    (a: any) => a.courierId === courierId
+  )
+  if (!myAssignment) return null
+
+  // Couriers with CANCELLED assignment don't see the order if it was reassigned
+  // to another courier with an active assignment
+  if (myAssignment.status === 'CANCELLED') {
+    const hasActiveAssignment = (order.assignments || []).some(
+      (a: any) => a.courierId !== courierId &&
+        ['ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'DELIVERED'].includes(a.status)
+    )
+    if (hasActiveAssignment) return null
+  }
+
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    orderType: order.orderType,
+    paymentMethod: order.paymentMethod,
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    deliveryAddressLine1: order.deliveryAddressLine1,
+    deliveryCity: order.deliveryCity,
+    deliveryNote: order.deliveryNote,
+    kitchenNote: order.kitchenNote,
+    totalAmount: Number(order.totalAmount),
+    createdAt: order.createdAt,
+    items: (order.items || []).map((i: any) => ({
+      id: i.id,
+      menuItemNameSnapshot: i.menuItemNameSnapshot,
+      quantity: i.quantity,
+    })),
+    assignment: {
+      id: myAssignment.id,
+      status: myAssignment.status,
+      assignedAt: myAssignment.assignedAt,
+      pickedUpAt: myAssignment.pickedUpAt,
+      deliveredAt: myAssignment.deliveredAt,
+    },
+    deliveryZone: order.deliveryZone
+      ? { id: order.deliveryZone.id, name: order.deliveryZone.name }
+      : null,
+  }
+}
+
 /**
  * GET /api/orders
  * Staff-only endpoint for viewing order lists.
- * - ADMIN/OWNER/KITCHEN: see all orders (kitchen sees kitchen-scoped fields)
- * - COURIER: see only orders with their own active assignment
+ *
+ * Returns role-specific DTOs:
+ * - ADMIN/OWNER: full admin detail (AdminOrderListDto)
+ * - KITCHEN: kitchen-scoped fields only (KitchenOrderListDto) — no customer contact, no earnings, no courier internals
+ * - COURIER: only orders with their own assignment (CourierOrderListDto) — active or historical
+ *
+ * Query params:
+ * - status: validated against enum (invalid → 400)
+ * - limit: max 100, default 50
+ * - cursor: pagination cursor
  */
 export const GET = withErrorHandler(async (request: NextRequest) => {
   const authResult = await requireRole(request, ['ADMIN', 'KITCHEN', 'COURIER', 'OWNER'])
@@ -43,18 +235,32 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10) || 50, 100)
   const cursor = searchParams.get('cursor')
 
+  // Validate status parameter — invalid status must return 400, not Prisma 500
+  if (status && !VALID_STATUSES.has(status)) {
+    return apiError('INVALID_REQUEST', `Neplatný stav: ${status}`, {
+      validStatuses: Array.from(VALID_STATUSES),
+    })
+  }
+
   const where: Record<string, unknown> = {}
   if (status) {
     where.status = status as OrderStatus
   }
 
   // Resource-level filter: couriers only see their own assigned orders
+  let courierId: string | null = null
   if (authResult.user.role === 'COURIER') {
     const courier = await db.courier.findUnique({
       where: { userId: authResult.user.id },
       select: { id: true },
     })
-    if (!courier) return NextResponse.json([])
+    if (!courier) {
+      return NextResponse.json(
+        { orders: [], nextCursor: null, hasMore: false },
+        { headers: { 'Cache-Control': 'private, no-store, max-age=0' } }
+      )
+    }
+    courierId = courier.id
     where.assignments = { some: { courierId: courier.id } }
   }
 
@@ -65,21 +271,35 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     include: {
       items: true,
-      statusHistory: { orderBy: { createdAt: 'asc' } },
-      deliveryZone: true,
-      customer: { include: { user: { select: { id: true, email: true, phone: true } } } },
+      deliveryZone: authResult.user.role !== 'KITCHEN' ? { select: { id: true, name: true } } : false,
       assignments: {
-        include: { courier: { include: { user: { select: { id: true, email: true } } } } },
+        include: {
+          courier: { select: { id: true, displayName: true } },
+        },
       },
     },
   })
 
   const hasMore = orders.length > limit
-  const items = hasMore ? orders.slice(0, limit) : orders
-  const nextCursor = hasMore ? items[items.length - 1].id : null
+  const rawItems = hasMore ? orders.slice(0, limit) : orders
+  const nextCursor = hasMore ? rawItems[rawItems.length - 1].id : null
+
+  // Transform to role-specific DTOs
+  let dtoItems: Array<AdminOrderListItem | KitchenOrderListItem | CourierOrderListItem>
+  if (authResult.user.role === 'KITCHEN') {
+    dtoItems = rawItems.map(toKitchenOrderListDto)
+  } else if (authResult.user.role === 'COURIER' && courierId) {
+    // Filter out orders where the courier's assignment was cancelled and reassigned
+    dtoItems = rawItems
+      .map((o) => toCourierOrderListDto(o, courierId!))
+      .filter((dto): dto is CourierOrderListItem => dto !== null)
+  } else {
+    // ADMIN/OWNER
+    dtoItems = rawItems.map(toAdminOrderListDto)
+  }
 
   return NextResponse.json(
-    { orders: items, nextCursor, hasMore },
+    { orders: dtoItems, nextCursor, hasMore },
     { headers: { 'Cache-Control': 'private, no-store, max-age=0' } }
   )
 })
