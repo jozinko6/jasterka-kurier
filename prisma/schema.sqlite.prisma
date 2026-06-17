@@ -265,6 +265,7 @@ model User {
   selfBillingInvoicesCreated   SelfBillingInvoice[]          @relation("SelfBillingInvoiceCreator")
   agreementStatementsCreated   AgreementEarningsStatement[]  @relation("StatementCreator")
   courierAuditActions          CourierAuditLog[]             @relation("CourierAuditActor")
+  legalProfilesVerified        RestaurantLegalProfile[]      @relation("LegalProfileVerifier")
 }
 
 model AuthSession {
@@ -872,8 +873,6 @@ model WorkSession {
   status       WorkSessionStatus @default(ACTIVE)
   startedAt    DateTime         @default(now())
   endedAt      DateTime?
-  pausedAt     DateTime?
-  resumedAt    DateTime?
   totalActiveSeconds Int        @default(0)
   note         String?
   createdAt    DateTime         @default(now())
@@ -881,8 +880,25 @@ model WorkSession {
 
   courier      Courier          @relation(fields: [courierId], references: [id], onDelete: Cascade)
   earningEntries EarningLedgerEntry[]
+  segments     WorkSessionSegment[]
 
   @@index([courierId, status])
+}
+
+// ─── Work session segments (pause/resume intervals) ───
+
+model WorkSessionSegment {
+  id           String   @id @default(cuid())
+  sessionId    String
+  startedAt    DateTime
+  endedAt      DateTime?
+  durationSeconds Int   @default(0)
+  createdAt    DateTime @default(now())
+
+  session      WorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([startedAt])
 }
 
 // ─── Payout period (výplatné obdobie) ───
@@ -1027,4 +1043,42 @@ model CourierAuditLog {
 
   @@index([courierId, createdAt])
   @@index([action])
+}
+
+// ─── Invoice sequence (concurrency-safe invoice numbering) ───
+
+model InvoiceSequence {
+  id            String   @id @default(cuid())
+  year          Int      @unique
+  currentValue  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─── Restaurant legal profile (odberateľ pre samofakturáciu) ───
+
+model RestaurantLegalProfile {
+  id                  String   @id @default(cuid())
+  businessName        String
+  legalName           String
+  street              String
+  city                String
+  postalCode          String
+  countryCode         String   @default("SK")
+  companyId           String   @unique // IČO
+  taxId               String   @unique // DIČ
+  vatId               String?  @unique // IČ DPH
+  vatStatus           VatStatus @default(VAT_PAYER)
+  iban                String?
+  ibanEncrypted       String?
+  ibanLast4           String?
+  swift               String?
+  contactEmail        String?
+  isVerified          Boolean  @default(false)
+  verifiedAt          DateTime?
+  verifiedByUserId    String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  verifiedBy          User?    @relation("LegalProfileVerifier", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
 }
