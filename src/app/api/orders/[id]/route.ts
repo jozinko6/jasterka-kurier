@@ -56,9 +56,17 @@ export const GET = withErrorHandler(async (
           },
         })
         if (!order) return apiError('NOT_FOUND', 'Objednávka nenájdená')
-        return NextResponse.json(toKitchenOrderDTO(order), {
-          headers: { 'Cache-Control': 'private, no-store, max-age=0' },
+        // Include allowedTransitions for kitchen UI
+        const kitchenTransitions = getAllowedTransitionsForContext({
+          role: 'KITCHEN',
+          orderType: order.orderType,
+          currentStatus: order.status,
+          courierAssigned: false,
         })
+        return NextResponse.json(
+          { ...toKitchenOrderDTO(order), allowedTransitions: kitchenTransitions },
+          { headers: { 'Cache-Control': 'private, no-store, max-age=0' } }
+        )
       }
 
       // Full detail for ADMIN/OWNER/COURIER(own)

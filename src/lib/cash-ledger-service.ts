@@ -40,6 +40,9 @@ export async function recordCashCollected(input: {
 /**
  * Record that a courier handed cash over to the company.
  * Called by admin or via a "settle cash" action.
+ *
+ * The `amountCents` is the positive amount handed over (e.g. 1000 = 10.00 €).
+ * The service stores it as a NEGATIVE entry (reducing the courier's balance).
  */
 export async function recordCashHandedOver(input: {
   courierId: string
@@ -48,12 +51,17 @@ export async function recordCashHandedOver(input: {
   note?: string
   occurredAt?: Date
 }): Promise<{ entryId: string; balanceAfterCents: number }> {
+  if (input.amountCents <= 0) {
+    throw new Error('Cash handover amount must be positive')
+  }
   return recordCashEntry({
-    ...input,
+    courierId: input.courierId,
     orderId: '', // not tied to a specific order
     type: 'CASH_HANDED_OVER',
+    amountCents: -input.amountCents, // negate to reduce balance
     note: input.note ?? 'Odovzdaná hotovosť',
     confirmedByUserId: input.confirmedByUserId,
+    occurredAt: input.occurredAt,
   })
 }
 

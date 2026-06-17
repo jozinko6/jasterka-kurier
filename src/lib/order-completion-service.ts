@@ -62,13 +62,10 @@ export async function completeDeliveryOrder(
     throw new CompleteOrderError('ORDER_NOT_FOUND', 'Objednávka nenájdená')
   }
 
-  // Verify ownership
-  const assignment = order.assignments[0]
-  if (!assignment || assignment.courierId !== courierId) {
-    throw new CompleteOrderError('NOT_ASSIGNED', 'Objednávka nie je priradená tomuto kuriérovi')
-  }
-
-  // If already delivered, return existing state (idempotent)
+  // If already delivered, return existing state (idempotent).
+  // This check MUST come before the ownership check, because after delivery
+  // the assignment status is DELIVERED (not in ASSIGNED/ACCEPTED/PICKED_UP),
+  // so the ownership filter would return empty.
   if (order.status === 'DELIVERED') {
     const existingEntries = await db.earningLedgerEntry.findMany({
       where: { orderId, type: { not: 'REVERSAL' } },
@@ -82,6 +79,12 @@ export async function completeDeliveryOrder(
       earningEntryIds: existingEntries.map((e) => e.id),
       cashCollectedCents: null,
     }
+  }
+
+  // Verify ownership (courier must have an active assignment to this order)
+  const assignment = order.assignments[0]
+  if (!assignment || assignment.courierId !== courierId) {
+    throw new CompleteOrderError('NOT_ASSIGNED', 'Objednávka nie je priradená tomuto kuriérovi')
   }
 
   // Verify the order is in a completable state

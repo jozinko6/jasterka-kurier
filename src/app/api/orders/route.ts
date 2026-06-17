@@ -324,9 +324,12 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
 
   // Return the order with the raw tracking token (only available at creation time).
   // The hash is stored in the DB; subsequent tracking uses the token.
+  // NEVER expose trackingTokenHash in the response.
+  const { trackingTokenHash: _omit, ...orderWithoutHash } = order
+  void _omit
   return NextResponse.json(
     {
-      ...order,
+      ...orderWithoutHash,
       trackingToken, // raw — client should store this for tracking
     },
     {
